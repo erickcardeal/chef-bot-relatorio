@@ -1,0 +1,369 @@
+{
+  "name": "Relatório de Visita - Fase 1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bot-relatorio-chef-fase1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "80e08c12-fe4e-4bda-a424-5045db4a2723",
+      "name": "Webhook - Recebe do Bot",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -2256,
+        -256
+      ],
+      "webhookId": "bot-relatorio-chef"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// Code - Normaliza Dados e Prepara Payload Notion\n// ============================================\n\nconst body = $input.first().json.body.body;\n\nconsole.log('=== PAYLOAD RECEBIDO ===');\nconsole.log(JSON.stringify(body, null, 2));\n\n// ============================================\n// 1. FUNÇÃO: NORMALIZA HORÁRIOS\n// ============================================\n\nfunction normalizarHorario(dataAtendimento, horario) {\n  try {\n    // Se horário vazio, retorna null\n    if (!horario || horario === '') {\n      return null;\n    }\n    \n    // Remove espaços e caracteres especiais\n    let horarioLimpo = String(horario).trim().replace(/[^\\d:]/g, '');\n    \n    let horas, minutos;\n    \n    if (horarioLimpo.includes(':')) {\n      // Formato \"09:00\" ou \"9:00\"\n      [horas, minutos] = horarioLimpo.split(':');\n    } else if (horarioLimpo.length === 4) {\n      // Formato \"0900\"\n      horas = horarioLimpo.substring(0, 2);\n      minutos = horarioLimpo.substring(2, 4);\n    } else if (horarioLimpo.length === 3) {\n      // Formato \"900\"\n      horas = horarioLimpo.substring(0, 1);\n      minutos = horarioLimpo.substring(1, 3);\n    } else if (horarioLimpo.length <= 2) {\n      // Formato só hora \"9\" ou \"12\"\n      horas = horarioLimpo;\n      minutos = \"00\";\n    } else {\n      throw new Error('Formato não reconhecido');\n    }\n    \n    // Normaliza para 2 dígitos\n    horas = String(horas).padStart(2, '0');\n    minutos = String(minutos).padStart(2, '0');\n    \n    // Valida\n    const h = parseInt(horas);\n    const m = parseInt(minutos);\n    \n    if (h > 23 || m > 59 || h < 0 || m < 0) {\n      throw new Error('Horário fora do range válido');\n    }\n    \n    // Pega a data do atendimento\n    const data = new Date(dataAtendimento);\n    const ano = data.getFullYear();\n    const mes = String(data.getMonth() + 1).padStart(2, '0');\n    const dia = String(data.getDate()).padStart(2, '0');\n    \n    // Monta ISO 8601 (São Paulo = UTC-3)\n    const horarioISO = `${ano}-${mes}-${dia}T${horas}:${minutos}:00-03:00`;\n    \n    console.log(`Horário normalizado: ${horario} → ${horarioISO}`);\n    \n    return horarioISO;\n    \n  } catch (error) {\n    console.error('❌ Erro ao normalizar horário:', horario, error.message);\n    // Retorna null em caso de erro\n    return null;\n  }\n}\n\n// ============================================\n// 2. FUNÇÃO: CRIAR RICH TEXT NOTION\n// ============================================\n\nfunction criarRichText(texto) {\n  if (!texto || texto === '' || texto === null || texto === undefined) {\n    return [];\n  }\n  \n  // Notion tem limite de 2000 caracteres por rich_text\n  const textoLimitado = String(texto).substring(0, 2000);\n  \n  return [{\n    text: {\n      content: textoLimitado\n    }\n  }];\n}\n\n// ============================================\n// 3. VALIDAÇÕES\n// ============================================\n\nif (!body.chef_id) {\n  throw new Error('❌ chef_id não encontrado no payload');\n}\n\nif (!body.cliente_id) {\n  throw new Error('❌ cliente_id não encontrado no payload');\n}\n\nif (!body.data_atendimento) {\n  throw new Error('❌ data_atendimento não encontrada no payload');\n}\n\nconsole.log('✅ Validações básicas OK');\n\n// ============================================\n// 4. NORMALIZA HORÁRIOS\n// ============================================\n\nconst horarioInicio = normalizarHorario(body.data_atendimento, body.horario_chegada);\nconst horarioFim = normalizarHorario(body.data_atendimento, body.horario_saida);\n\nif (!horarioInicio) {\n  console.warn('⚠️ Horário de chegada inválido ou vazio');\n}\n\nif (!horarioFim) {\n  console.warn('⚠️ Horário de saída inválido ou vazio');\n}\n\n// ============================================\n// 5. PREPARA PAYLOAD NOTION (TIPOS CORRETOS)\n// ============================================\n\nconst payload = {\n  parent: {\n    database_id: \"a801dd6a177549469fa8a6293be1d609\"\n  },\n  properties: {\n    // ===== RELATIONS =====\n    \"Chef\": {\n      relation: [{ id: body.chef_id }]\n    },\n    \"Cliente\": {\n      relation: [{ id: body.cliente_id }]\n    },\n    \n    // ===== DATAS =====\n    \"Data Atendimento\": {\n      date: {\n        start: body.data_atendimento\n      }\n    }\n  }\n};\n\n// ===== HORÁRIOS (Rich Text, não Date!) =====\nif (horarioInicio) {\n  const horaChegada = horarioInicio.split('T')[1].substring(0, 5); // Extrai \"12:00\"\n  payload.properties[\"Horário Chegada\"] = {\n    rich_text: [{\n      text: { content: horaChegada }\n    }]\n  };\n}\n\nif (horarioFim) {\n  const horaSaida = horarioFim.split('T')[1].substring(0, 5); // Extrai \"14:00\"\n  payload.properties[\"Horário Saída\"] = {\n    rich_text: [{\n      text: { content: horaSaida }\n    }]\n  };\n}\n\n// ===== COMO FOI (Rich Text, não Select!) =====\nif (body.como_foi_visita && body.como_foi_visita !== '') {\n  payload.properties[\"Como foi a visita\"] = {\n    rich_text: [{\n      text: { content: body.como_foi_visita }\n    }]\n  };\n}\n\n// ===== TEXTOS (Rich Text) =====\nconst comentarioCliente = criarRichText(body.comentario_cliente);\nif (comentarioCliente.length > 0) {\n  payload.properties[\"Comentário cliente\"] = {\n    rich_text: comentarioCliente\n  };\n}\n\nconst problemaEspecifico = criarRichText(body.problema_especifico);\nif (problemaEspecifico.length > 0) {\n  payload.properties[\"Problemas específicos\"] = {\n    rich_text: problemaEspecifico\n  };\n}\n\n// ===== PORÇÕES (Select, não Checkbox!) =====\nconst porcoesExatas = body.porcoes_exatas === \"Sim\" ? \"Sim\" : \"Não\";\npayload.properties[\"Porções exatas?\"] = {\n  select: { name: porcoesExatas }\n};\n\nconst motivoPorcoes = criarRichText(body.motivo_porcoes);\nif (motivoPorcoes.length > 0) {\n  payload.properties[\"Motivo porções não exatas\"] = {\n    rich_text: motivoPorcoes\n  };\n}\n\n// ===== DESCARTE =====\nif (body.descarte && body.descarte !== '') {\n  payload.properties[\"Descarte?\"] = {\n    select: { name: body.descarte }\n  };\n}\n\nconst itensDescartados = criarRichText(body.itens_descartados);\nif (itensDescartados.length > 0) {\n  payload.properties[\"Itens descartados\"] = {\n    rich_text: itensDescartados\n  };\n}\n\n// ===== PODE VENCER =====\nif (body.pode_vencer && body.pode_vencer !== '') {\n  payload.properties[\"Itens podem vencer?\"] = {\n    select: { name: body.pode_vencer }\n  };\n}\n\nconst itensPVencer = criarRichText(body.itens_podem_vencer);\nif (itensPVencer.length > 0) {\n  payload.properties[\"Itens que podem vencer\"] = {\n    rich_text: itensPVencer\n  };\n}\n\n// ===== STATUS =====\npayload.properties[\"Status\"] = {\n  select: { name: \"Criado - Aguardando Inventário\" }\n};\n\nconsole.log('✅ Payload montado com sucesso');\n\n// ============================================\n// 6. RETORNA\n// ============================================\n\n// Formatar título com validações\nconst nomeCliente = body.cliente_nome || 'Cliente';\nconst nomeChef = body.chef_nome || body.chef_username || 'Chef';\nconst dataFormatada = body.data_atendimento ? body.data_atendimento.split('T')[0] : 'Sem data';\nconst titulo = nomeCliente + ' - ' + nomeChef + ' - ' + dataFormatada;\n\nconsole.log('=== CRIAÇÃO DO TÍTULO ===');\nconsole.log('Cliente:', nomeCliente);\nconsole.log('Chef:', nomeChef);\nconsole.log('Data formatada:', dataFormatada);\nconsole.log('Título final:', titulo);\n\nreturn {\n  json: {\n    payload: payload,\n    titulo: titulo,\n    chef_id: body.chef_id,\n    chef_nome: body.chef_nome || body.chef_username,\n    chef_telegram_id: body.chef_telegram_id,\n    cliente_id: body.cliente_id,\n    cliente_nome: body.cliente_nome,\n    atendimento_id: body.atendimento_id || '',\n    data_atendimento: body.data_atendimento,\n    horario_inicio: horarioInicio,\n    horario_fim: horarioFim,\n    payload_original: body\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1952,
+        -256
+      ],
+      "id": "0201afe8-b491-4793-a926-66c17b88a702",
+      "name": "Formatar Dados"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Code - Prepara Fotos para Upload (MÚLTIPLAS FOTOS)\n// Suporta arrays de fotos vindas de álbuns do Telegram\n\nconst dados = $input.first().json;\nconst body = dados.payload_original;\n\nconst items = [];\n\n// Formatar nome do cliente\nfunction formatarNomeCliente(nome) {\n  return nome\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '')\n    .replace(/\\s+/g, '-')\n    .replace(/[^a-zA-Z0-9-]/g, '')\n    .substring(0, 30);\n}\n\n// Formatar data\nfunction formatarData(dataISO) {\n  const data = new Date(dataISO);\n  const ano = data.getFullYear();\n  const mes = String(data.getMonth() + 1).padStart(2, '0');\n  const dia = String(data.getDate()).padStart(2, '0');\n  return ano + '-' + mes + '-' + dia;\n}\n\nconst clienteFormatado = formatarNomeCliente(dados.cliente_nome);\nconst dataFormatada = formatarData(dados.data_atendimento);\n\nconsole.log('Cliente formatado:', clienteFormatado);\nconsole.log('Data formatada:', dataFormatada);\n\n// ============================================\n// FOTOS DE ENTRADA\n// ============================================\n\n// Prioriza o array novo, mas mantém compatibilidade com foto única\nlet fotosEntrada = body.fotos_entrada_base64 || [];\n\n// Se não tem array mas tem foto única, cria array com ela\nif (fotosEntrada.length === 0 && body.foto_entrada_base64 && body.foto_entrada_base64 !== '') {\n  fotosEntrada = [body.foto_entrada_base64];\n}\n\nconsole.log('Quantidade de fotos de entrada:', fotosEntrada.length);\n\n// Processa cada foto de entrada\nfotosEntrada.forEach(function(base64Foto, index) {\n  if (base64Foto && base64Foto !== '') {\n    const base64Limpo = base64Foto.replace(/^data:image\\/[a-z]+;base64,/, '');\n    const buffer = Buffer.from(base64Limpo, 'base64');\n    \n    const sufixo = fotosEntrada.length > 1 ? '_' + (index + 1) : '';\n    const fileName = 'Atendimento_' + clienteFormatado + '_' + dataFormatada + '_entrada' + sufixo + '.jpg';\n    \n    items.push({\n      json: {\n        tipo: 'entrada',\n        numero: index + 1,\n        total: fotosEntrada.length,\n        fileName: fileName,\n        mimeType: 'image/jpeg',\n        chef_id: dados.chef_id,\n        chef_nome: dados.chef_nome,\n        chef_telegram_id: dados.chef_telegram_id,\n        cliente_id: dados.cliente_id,\n        cliente_nome: dados.cliente_nome,\n        atendimento_id: dados.atendimento_id || '',\n        data_atendimento: dados.data_atendimento,\n        horario_inicio: dados.horario_inicio,\n        horario_fim: dados.horario_fim,\n        payload: dados.payload,\n        payload_original: dados.payload_original\n      },\n      binary: {\n        data: buffer\n      }\n    });\n    \n    console.log('✅ Foto entrada ' + (index + 1) + '/' + fotosEntrada.length + ':', fileName);\n  }\n});\n\n// ============================================\n// FOTOS DE SAÍDA\n// ============================================\n\nlet fotosSaida = body.fotos_saida_base64 || [];\n\nif (fotosSaida.length === 0 && body.foto_saida_base64 && body.foto_saida_base64 !== '') {\n  fotosSaida = [body.foto_saida_base64];\n}\n\nconsole.log('Quantidade de fotos de saída:', fotosSaida.length);\n\nfotosSaida.forEach(function(base64Foto, index) {\n  if (base64Foto && base64Foto !== '') {\n    const base64Limpo = base64Foto.replace(/^data:image\\/[a-z]+;base64,/, '');\n    const buffer = Buffer.from(base64Limpo, 'base64');\n    \n    const sufixo = fotosSaida.length > 1 ? '_' + (index + 1) : '';\n    const fileName = 'Atendimento_' + clienteFormatado + '_' + dataFormatada + '_saida' + sufixo + '.jpg';\n    \n    items.push({\n      json: {\n        tipo: 'saida',\n        numero: index + 1,\n        total: fotosSaida.length,\n        fileName: fileName,\n        mimeType: 'image/jpeg',\n        chef_id: dados.chef_id,\n        chef_nome: dados.chef_nome,\n        chef_telegram_id: dados.chef_telegram_id,\n        cliente_id: dados.cliente_id,\n        cliente_nome: dados.cliente_nome,\n        atendimento_id: dados.atendimento_id || '',\n        data_atendimento: dados.data_atendimento,\n        horario_inicio: dados.horario_inicio,\n        horario_fim: dados.horario_fim,\n        payload: dados.payload,\n        payload_original: dados.payload_original\n      },\n      binary: {\n        data: buffer\n      }\n    });\n    \n    console.log('✅ Foto saída ' + (index + 1) + '/' + fotosSaida.length + ':', fileName);\n  }\n});\n\n// ============================================\n// Se não tem fotos\n// ============================================\n\nif (items.length === 0) {\n  console.log('ℹ️ Nenhuma foto para upload');\n  items.push({\n    json: {\n      sem_fotos: true,\n      chef_id: dados.chef_id,\n      chef_nome: dados.chef_nome,\n      chef_telegram_id: dados.chef_telegram_id,\n      cliente_id: dados.cliente_id,\n      cliente_nome: dados.cliente_nome,\n      data_atendimento: dados.data_atendimento,\n      horario_inicio: dados.horario_inicio,\n      horario_fim: dados.horario_fim,\n      payload: dados.payload,\n      payload_original: dados.payload_original\n    }\n  });\n}\n\nconsole.log('📊 Total de fotos preparadas:', items.length);\nconsole.log('   Entrada:', fotosEntrada.length);\nconsole.log('   Saída:', fotosSaida.length);\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1648,
+        -256
+      ],
+      "id": "80e910f1-9206-4e17-ad34-f7856a806b7c",
+      "name": "Code - Prepara Fotos"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.sem_fotos }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -1360,
+        -256
+      ],
+      "id": "c9967e5f-9cf2-48d4-9321-ebe4b0e5eb8d",
+      "name": "IF - Tem Fotos?"
+    },
+    {
+      "parameters": {
+        "name": "={{ $json.fileName }}",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1yy9KFX3nVwxszuJ8ERCXzf3eYFrCJw7l",
+          "mode": "list",
+          "cachedResultName": "Fotos Visitas",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1yy9KFX3nVwxszuJ8ERCXzf3eYFrCJw7l"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1040,
+        0
+      ],
+      "id": "7cd976fb-2fac-483f-9a6b-4b0b85395ba1",
+      "name": "Google Drive - Upload Foto",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "ZcwEpuTK8Gm6UQ4B",
+          "name": "Google Drive <> N8N"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Code - Agrupa URLs das Fotos (VERSÃO SIMPLIFICADA)\n// Coleta URLs do Google Drive e busca dados base do Code anterior\n\nconst items = $input.all();\n\nlet urlsFotosEntrada = [];\nlet urlsFotosSaida = [];\n\nconsole.log('Total de items recebidos:', items.length);\n\n// Coleta URLs das fotos\nitems.forEach(function(item, index) {\n  if (item.json.webViewLink) {\n    const fileName = item.json.name || '';\n    const url = item.json.webViewLink;\n    \n    if (fileName.includes('_entrada')) {\n      urlsFotosEntrada.push(url);\n      console.log('✅ Foto entrada:', url);\n    } else if (fileName.includes('_saida')) {\n      urlsFotosSaida.push(url);\n      console.log('✅ Foto saída:', url);\n    }\n  }\n});\n\n// Busca dados base do Code - Prepara Fotos\nconst dadosPreparaFotos = $('Code - Prepara Fotos').all();\nlet dadosBase = null;\n\n// Pega o primeiro item que tiver os dados completos\ndadosPreparaFotos.forEach(function(item) {\n  if (!dadosBase && item.json.payload) {\n    dadosBase = item.json;\n  }\n});\n\n// Se não encontrou, tenta no input atual\nif (!dadosBase) {\n  items.forEach(function(item) {\n    if (!dadosBase && item.json.payload) {\n      dadosBase = item.json;\n    }\n  });\n}\n\n// Validação\nif (!dadosBase || !dadosBase.payload) {\n  throw new Error('Dados base não encontrados! Verifique o fluxo.');\n}\n\nconsole.log('✅ Dados base encontrados');\nconsole.log('URLs entrada:', urlsFotosEntrada.length);\nconsole.log('URLs saída:', urlsFotosSaida.length);\n\nreturn {\n  json: {\n    payload: dadosBase.payload,\n    chef_id: dadosBase.chef_id,\n    chef_nome: dadosBase.chef_nome,\n    chef_telegram_id: dadosBase.chef_telegram_id,\n    cliente_id: dadosBase.cliente_id,\n    cliente_nome: dadosBase.cliente_nome,\n    atendimento_id: dadosBase.atendimento_id || '',\n    data_atendimento: dadosBase.data_atendimento,\n    horario_inicio: dadosBase.horario_inicio,\n    horario_fim: dadosBase.horario_fim,\n    payload_original: dadosBase.payload_original,\n    urls_fotos_entrada: urlsFotosEntrada,\n    urls_fotos_saida: urlsFotosSaida,\n    total_fotos_entrada: urlsFotosEntrada.length,\n    total_fotos_saida: urlsFotosSaida.length\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -736,
+        -272
+      ],
+      "id": "a1deac59-e1b9-4371-ad8c-d6d00cd8c474",
+      "name": "Code - Agrupa URLs"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Code - Adiciona Fotos ao Payload\n// Atualiza payload com URLs do Google Drive e título\n\nconst dados = $input.first().json;\nconst payload = dados.payload;\n\nconsole.log('=== DADOS RECEBIDOS ===');\nconsole.log('Título:', dados.titulo);\nconsole.log('Fotos entrada:', dados.urls_fotos_entrada);\nconsole.log('Fotos saída:', dados.urls_fotos_saida);\n\n// ===== TÍTULO (com validação) =====\nif (dados.titulo && dados.titulo !== '' && dados.titulo !== 'undefined') {\n  payload.properties[\"Título\"] = {\n    title: [{\n      text: {\n        content: dados.titulo\n      }\n    }]\n  };\n  console.log('✅ Título adicionado:', dados.titulo);\n} else {\n  console.warn('⚠️ Título vazio ou inválido, usando fallback');\n  // Cria título do zero como fallback\n  const dataFallback = dados.data_atendimento ? dados.data_atendimento.split('T')[0] : 'Sem data';\n  const tituloFallback = (dados.cliente_nome || 'Cliente') + ' - ' + (dados.chef_nome || 'Chef') + ' - ' + dataFallback;\n  \n  payload.properties[\"Título\"] = {\n    title: [{\n      text: {\n        content: tituloFallback\n      }\n    }]\n  };\n  console.log('✅ Título fallback criado:', tituloFallback);\n}\n\n// ===== FOTO ENTRADA (Files & Media) =====\nif (dados.urls_fotos_entrada && dados.urls_fotos_entrada.length > 0) {\n  payload.properties[\"Foto Entrada\"] = {\n    files: dados.urls_fotos_entrada.map(function(url, index) {\n      return {\n        name: 'Entrada ' + (index + 1) + '.jpg',\n        type: 'external',\n        external: { url: url }\n      };\n    })\n  };\n  console.log('✅ Fotos entrada adicionadas:', dados.urls_fotos_entrada.length);\n}\n\n// ===== FOTO SAÍDA (Files & Media) =====\nif (dados.urls_fotos_saida && dados.urls_fotos_saida.length > 0) {\n  payload.properties[\"Foto Saída\"] = {\n    files: dados.urls_fotos_saida.map(function(url, index) {\n      return {\n        name: 'Saída ' + (index + 1) + '.jpg',\n        type: 'external',\n        external: { url: url }\n      };\n    })\n  };\n  console.log('✅ Fotos saída adicionadas:', dados.urls_fotos_saida.length);\n}\n\nreturn {\n  json: {\n    payload: payload,\n    titulo: dados.titulo,\n    chef_id: dados.chef_id,\n    chef_nome: dados.chef_nome,\n    chef_telegram_id: dados.chef_telegram_id,\n    cliente_id: dados.cliente_id,\n    cliente_nome: dados.cliente_nome,\n    atendimento_id: dados.atendimento_id || '',\n    data_atendimento: dados.data_atendimento,\n    horario_inicio: dados.horario_inicio,\n    horario_fim: dados.horario_fim,\n    urls_fotos_entrada: dados.urls_fotos_entrada,\n    urls_fotos_saida: dados.urls_fotos_saida\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        -272
+      ],
+      "id": "ddfceca5-e92d-430d-9fa3-228b363c42dd",
+      "name": "Code - Adiciona Fotos ao Payload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/pages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2022-06-28"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.payload }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -160,
+        -272
+      ],
+      "id": "419c2c1d-f773-4f6f-b5bd-4a8e70aef51f",
+      "name": "HTTP - Criar Relatório Notion",
+      "credentials": {
+        "notionApi": {
+          "id": "xcuotgIi8kbGrCBq",
+          "name": "Notion <> N8N"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  message: 'Relatório criado com sucesso!',\n  notion_page_id: $('HTTP - Criar Relatório Notion').item.json.id || '',\n  notion_url: $('HTTP - Criar Relatório Notion').item.json.url || '',\n  chef: $('Code - Adiciona Fotos ao Payload').item.json.chef_nome || '',\n  cliente: $('Code - Adiciona Fotos ao Payload').item.json.cliente_nome || '',\n  data_atendimento: $('Code - Adiciona Fotos ao Payload').item.json.data_atendimento || '',\n  fotos: {\n    entrada: $('Code - Adiciona Fotos ao Payload').item.json.urls_fotos_entrada || [],\n    saida: $('Code - Adiciona Fotos ao Payload').item.json.urls_fotos_saida || []\n  },\n  status: 'awaiting_inventory'\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        816,
+        -256
+      ],
+      "id": "9512aa74-0604-441e-96db-33258133af73",
+      "name": "Respond - Confirma ao Bot"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $('Code - Adiciona Fotos ao Payload').item.json.atendimento_id }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        160,
+        -272
+      ],
+      "id": "d8bc5626-07f1-49fc-9afd-a4012fab2b01",
+      "name": "IF - Tem Atendimento ID?"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.notion.com/v1/pages/{{ $('Code - Adiciona Fotos ao Payload').item.json.atendimento_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2022-06-28"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  properties: {\n    'Relatório': {\n      relation: [\n        {\n          id: $('HTTP - Criar Relatório Notion').item.json.id || ''\n        }\n      ]\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        496,
+        -416
+      ],
+      "id": "8f651ad9-03ca-470f-a756-fc08855c7907",
+      "name": "HTTP - Atualizar Atendimento",
+      "credentials": {
+        "notionApi": {
+          "id": "xcuotgIi8kbGrCBq",
+          "name": "Notion <> N8N"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Recebe do Bot": {
+      "main": [
+        [
+          {
+            "node": "Formatar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Prepara Fotos": {
+      "main": [
+        [
+          {
+            "node": "IF - Tem Fotos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Tem Fotos?": {
+      "main": [
+        [
+          {
+            "node": "Code - Agrupa URLs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Drive - Upload Foto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Upload Foto": {
+      "main": [
+        [
+          {
+            "node": "Code - Agrupa URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Agrupa URLs": {
+      "main": [
+        [
+          {
+            "node": "Code - Adiciona Fotos ao Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Adiciona Fotos ao Payload": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Criar Relatório Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatar Dados": {
+      "main": [
+        [
+          {
+            "node": "Code - Prepara Fotos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Criar Relatório Notion": {
+      "main": [
+        [
+          {
+            "node": "IF - Tem Atendimento ID?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Tem Atendimento ID?": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Atualizar Atendimento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Confirma ao Bot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Atualizar Atendimento": {
+      "main": [
+        [
+          {
+            "node": "Respond - Confirma ao Bot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e4feffbb-a4bd-4985-a5a2-a2cb7c7b79c0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "23fd11dbb65f405d9439226230861dcd2be8bf8c9bcfdf11d867e1e6075d97ef"
+  },
+  "id": "Jf2IWJbddR4nr0tc",
+  "tags": []
+}
