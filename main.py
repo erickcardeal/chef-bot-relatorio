@@ -1774,11 +1774,30 @@ class ChefBot:
                         # Tentar ler resposta
                         try:
                             response_text = await response.text()
-                            logger.info(f"📄 Resposta do webhook: {response_text[:500]}")  # Primeiros 500 chars
+                            
+                            # Verificar se resposta está vazia
+                            if not response_text or response_text.strip() == '':
+                                logger.warning(f"⚠️ Resposta do webhook FASE 1 está vazia (status {status_code})")
+                                if status_code == 200:
+                                    # Status 200 mas resposta vazia - tratar como se não tivesse notion_page_id
+                                    # O código de retry abaixo vai tratar isso
+                                    response_text = '{}'  # JSON vazio para continuar o fluxo
+                                    logger.info("🔄 Resposta vazia mas status 200 - será tratado como falta de notion_page_id")
+                                else:
+                                    # Status diferente de 200 e resposta vazia - erro
+                                    raise Exception(f"Resposta vazia com status {status_code}")
+                            
+                            logger.info(f"📄 Resposta do webhook: {response_text[:500] if response_text else '(vazia)'}")  # Primeiros 500 chars
                             
                             if status_code == 200:
                                 try:
-                                    resultado = json.loads(response_text)
+                                    # Verificar se response_text não está vazio antes de fazer parse
+                                    if not response_text or response_text.strip() == '':
+                                        # Resposta vazia - tratar como JSON vazio
+                                        resultado = {}
+                                        logger.warning("⚠️ Resposta vazia tratada como JSON vazio")
+                                    else:
+                                        resultado = json.loads(response_text)
                                     notion_url = resultado.get('notion_url', '')
                                     notion_page_id = resultado.get('notion_page_id', '')
                                     
@@ -1808,7 +1827,18 @@ class ChefBot:
                                             ) as response_retry:
                                                 if response_retry.status == 200:
                                                     response_text_retry = await response_retry.text()
-                                                    resultado_retry = json.loads(response_text_retry)
+                                                    
+                                                    # Tratar resposta vazia no retry
+                                                    if not response_text_retry or response_text_retry.strip() == '':
+                                                        logger.warning("⚠️ Resposta vazia no retry também")
+                                                        resultado_retry = {}
+                                                    else:
+                                                        try:
+                                                            resultado_retry = json.loads(response_text_retry)
+                                                        except json.JSONDecodeError as e:
+                                                            logger.error(f"❌ Erro ao parsear JSON no retry: {e}")
+                                                            resultado_retry = {}
+                                                    
                                                     notion_page_id_retry = resultado_retry.get('notion_page_id', '')
                                                     
                                                     if notion_page_id_retry:
@@ -1927,24 +1957,137 @@ class ChefBot:
                                     return INVENTARIO_OPCAO
                                 except json.JSONDecodeError as e:
                                     logger.error(f"❌ Erro ao parsear JSON da resposta: {e}")
-                                    logger.error(f"Resposta recebida: {response_text}")
-                                    # Erro ao parsear JSON - não podemos confirmar se o relatório foi criado
-                                    # PARAR O PROCESSO
-                                    await update.message.reply_text(
-                                        "❌ *ERRO AO PROCESSAR RELATÓRIO*\n\n"
-                                        "Ocorreu um erro ao processar a resposta do sistema.\n\n"
-                                        "🔧 *O que aconteceu:*\n"
-                                        "A primeira parte do relatório foi enviada, mas não conseguimos interpretar a resposta do sistema.\n\n"
-                                        "⚠️ *Ação necessária:*\n"
-                                        "Por favor, entre em contato com o suporte técnico e informe este erro.\n"
-                                        "Seus dados foram salvos localmente, mas não conseguimos confirmar a criação no Notion.\n\n"
-                                        "📞 Entre em contato com o suporte para resolver este problema.",
-                                        parse_mode='Markdown',
-                                        reply_markup=ReplyKeyboardRemove()
-                                    )
-                                    # PARAR O PROCESSO - não continuar para inventário
-                                    context.user_data.clear()
-                                    return ConversationHandler.END
+                                    logger.error(f"Resposta recebida: '{response_text}' (tamanho: {len(response_text) if response_text else 0})")
+                                    
+                                    # Se a resposta está vazia, fazer retry diretamente
+                                    if not response_text or response_text.strip() == '':
+                                        logger.warning("⚠️ Resposta vazia detectada no tratamento de erro - fazendo retry")
+                                        # Fazer retry (copiar lógica do retry existente)
+                                        await update.message.reply_text(
+                                            "⏳ Aguardando confirmação do sistema...",
+                                            parse_mode='Markdown'
+                                        )
+                                        await asyncio.sleep(3)
+                                        
+                                        # Fazer segunda tentativa (polling)
+                                        try:
+                                            async with session.post(
+                                                webhook_url_fase1,
+                                                json=payload,
+                                                timeout=aiohttp.ClientTimeout(total=10)
+                                            ) as response_retry:
+                                                if response_retry.status == 200:
+                                                    response_text_retry = await response_retry.text()
+                                                    
+                                                    # Tratar resposta vazia no retry
+                                                    if not response_text_retry or response_text_retry.strip() == '':
+                                                        logger.warning("⚠️ Resposta vazia no retry também")
+                                                        resultado_retry = {}
+                                                    else:
+                                                        try:
+                                                            resultado_retry = json.loads(response_text_retry)
+                                                        except json.JSONDecodeError as e:
+                                                            logger.error(f"❌ Erro ao parsear JSON no retry: {e}")
+                                                            resultado_retry = {}
+                                                    
+                                                    notion_page_id_retry = resultado_retry.get('notion_page_id', '')
+                                                    
+                                                    if notion_page_id_retry:
+                                                        logger.info(f"✅ FASE 1 confirmada no retry! Notion Page ID: {notion_page_id_retry}")
+                                                        context.user_data['relatorio']['notion_page_id'] = notion_page_id_retry
+                                                        notion_page_id = notion_page_id_retry
+                                                        # Continuar fluxo normal - vamos pular o resto do except e ir para o código de sucesso
+                                                        # Como estamos dentro de um except aninhado, vamos fazer o código de sucesso aqui mesmo
+                                                        # e depois fazer return para sair
+                                                        # Mensagem de sucesso
+                                                        mensagem_1 = "✅ Informações gerais do atendimento enviadas com sucesso."
+                                                        await update.message.reply_text(
+                                                            mensagem_1,
+                                                            parse_mode='Markdown',
+                                                            reply_markup=ReplyKeyboardRemove()
+                                                        )
+                                                        
+                                                        # Verificar se precisa de inventário (Personal Shopper)
+                                                        personal_shopper = context.user_data.get('personal_shopper', 'Não') or context.user_data['relatorio'].get('personal_shopper', 'Não')
+                                                        
+                                                        # Se Personal Shopper indicar que NÃO precisa de inventário, pular e finalizar
+                                                        if not self.precisa_inventario(personal_shopper):
+                                                            logger.info(f"⏭️ Pulando inventário - Personal Shopper = '{personal_shopper}' para cliente {context.user_data['relatorio']['cliente_nome']}")
+                                                            await update.message.reply_text(
+                                                                "✅ *Relatório finalizado!*\n\n"
+                                                                "Este atendimento não requer inventário.\n\n"
+                                                                "Caso você queira enviar outro relatório de visita, basta iniciar novamente a conversa.\n\n"
+                                                                "Let's cook!",
+                                                                parse_mode='Markdown',
+                                                                reply_markup=ReplyKeyboardRemove()
+                                                            )
+                                                            context.user_data.clear()
+                                                            if update.effective_user.id in user_activity:
+                                                                del user_activity[update.effective_user.id]
+                                                            return ConversationHandler.END
+                                                        
+                                                        # Se Personal Shopper não for "Não", continuar com inventário
+                                                        logger.info(f"📦 Continuando com inventário - Personal Shopper = '{personal_shopper}' para cliente {context.user_data['relatorio']['cliente_nome']}")
+                                                        await update.message.reply_text("Agora vamos seguir para o inventário.")
+                                                        await update.message.reply_text(
+                                                            "Me envie quais foram os ingredientes/insumos que sobraram do último atendimento, seja o mais detalhista possível, pois isso vai impactar no próximo atendimento.\n\n"
+                                                            "Não se esqueça de pontuar temperos sensíveis como: Pimentas, Açafrão da terra, Canela, Sal, Zatar, etc.."
+                                                        )
+                                                        self.reagendar_timeout_apos_mensagem(update, context)
+                                                        return INVENTARIO_OPCAO
+                                                    else:
+                                                        # NÃO RECEBEU notion_page_id APÓS RETRY - PARAR O PROCESSO
+                                                        logger.error(f"❌ ERRO CRÍTICO: Retry também não retornou notion_page_id. Resposta: '{response_text_retry}'")
+                                                        await update.message.reply_text(
+                                                            "❌ *ERRO AO CRIAR RELATÓRIO*\n\n"
+                                                            "O sistema não conseguiu criar o relatório no Notion.\n\n"
+                                                            "🔧 *O que aconteceu:*\n"
+                                                            "A primeira parte do relatório foi enviada, mas não recebemos confirmação de que o relatório foi criado corretamente.\n\n"
+                                                            "⚠️ *Ação necessária:*\n"
+                                                            "Por favor, entre em contato com o suporte técnico e informe este erro.\n"
+                                                            "Seus dados foram salvos localmente, mas o relatório não foi criado no Notion.\n\n"
+                                                            "📞 Entre em contato com o suporte para resolver este problema.",
+                                                            parse_mode='Markdown',
+                                                            reply_markup=ReplyKeyboardRemove()
+                                                        )
+                                                        context.user_data.clear()
+                                                        return ConversationHandler.END
+                                                else:
+                                                    raise Exception(f"Erro no retry: {response_retry.status}")
+                                        except Exception as e:
+                                            logger.error(f"❌ Erro no retry: {e}", exc_info=True)
+                                            await update.message.reply_text(
+                                                "❌ *ERRO AO PROCESSAR RELATÓRIO*\n\n"
+                                                "Ocorreu um erro ao tentar confirmar a criação do relatório.\n\n"
+                                                "🔧 *O que aconteceu:*\n"
+                                                "A primeira parte do relatório foi enviada, mas não conseguimos confirmar se o relatório foi criado corretamente.\n\n"
+                                                "⚠️ *Ação necessária:*\n"
+                                                "Por favor, entre em contato com o suporte técnico e informe este erro.\n"
+                                                "Seus dados foram salvos localmente, mas não conseguimos confirmar a criação no Notion.\n\n"
+                                                "📞 Entre em contato com o suporte para resolver este problema.",
+                                                parse_mode='Markdown',
+                                                reply_markup=ReplyKeyboardRemove()
+                                            )
+                                            context.user_data.clear()
+                                            return ConversationHandler.END
+                                    else:
+                                        # Erro ao parsear JSON (resposta não vazia mas JSON inválido) - não podemos confirmar se o relatório foi criado
+                                        # PARAR O PROCESSO
+                                        await update.message.reply_text(
+                                            "❌ *ERRO AO PROCESSAR RELATÓRIO*\n\n"
+                                            "Ocorreu um erro ao processar a resposta do sistema.\n\n"
+                                            "🔧 *O que aconteceu:*\n"
+                                            "A primeira parte do relatório foi enviada, mas não conseguimos interpretar a resposta do sistema.\n\n"
+                                            "⚠️ *Ação necessária:*\n"
+                                            "Por favor, entre em contato com o suporte técnico e informe este erro.\n"
+                                            "Seus dados foram salvos localmente, mas não conseguimos confirmar a criação no Notion.\n\n"
+                                            "📞 Entre em contato com o suporte para resolver este problema.",
+                                            parse_mode='Markdown',
+                                            reply_markup=ReplyKeyboardRemove()
+                                        )
+                                        # PARAR O PROCESSO - não continuar para inventário
+                                        context.user_data.clear()
+                                        return ConversationHandler.END
                             
                             elif status_code == 404:
                                 # Webhook não encontrado - PARAR O PROCESSO
