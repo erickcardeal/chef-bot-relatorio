@@ -223,7 +223,39 @@ class ChefBot:
         """Helper para atualizar atividade em handlers"""
         if update and update.effective_user:
             self.atualizar_atividade_usuario(update.effective_user.id)
+    
+    def reagendar_timeout_apos_mensagem(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Reagendar timeout após bot enviar mensagem esperando resposta"""
+        if not update or not update.effective_user:
+            return
         
+        user_id = update.effective_user.id
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        
+        if not chat_id or not context.job_queue:
+            return
+        
+        # Atualizar atividade e reagendar timeout
+        self.atualizar_atividade_usuario(user_id)
+        self.agendar_verificacao_timeout(user_id, chat_id, context.job_queue)
+    
+    def precisa_inventario(self, personal_shopper: str) -> bool:
+        """Verificar se precisa de inventário baseado no personal_shopper"""
+        if not personal_shopper:
+            return True  # Por padrão, precisa de inventário se não especificado
+        
+        # Normalizar: remover espaços, converter para minúsculas e remover acentos
+        valor_normalizado = personal_shopper.strip().lower()
+        
+        # Remover acentos (caso comum: "não" vs "nao")
+        valor_normalizado = valor_normalizado.replace('ã', 'a').replace('õ', 'o')
+        
+        # Valores que indicam que NÃO precisa de inventário
+        valores_sem_inventario = ['não', 'nao', 'no', 'n', 'false', '0', '']
+        
+        # Se o valor normalizado está na lista, NÃO precisa de inventário
+        return valor_normalizado not in valores_sem_inventario
+    
     def format_date(self, date_str: str) -> str:
         """Formatar data para exibição"""
         try:
@@ -422,6 +454,9 @@ class ChefBot:
             reply_markup=ReplyKeyboardRemove()
         )
         
+        # Reagendar timeout após enviar mensagem esperando resposta
+        self.reagendar_timeout_apos_mensagem(update, context)
+        
         return HORARIO_CHEGADA
 
     async def horario_chegada(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -436,6 +471,9 @@ class ChefBot:
             "Qual foi o horário de saída?"
         )
         
+        # Reagendar timeout após enviar mensagem esperando resposta
+        self.reagendar_timeout_apos_mensagem(update, context)
+        
         return HORARIO_SAIDA
 
     async def horario_saida(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -449,6 +487,9 @@ class ChefBot:
         await update.message.reply_text(
             "De modo geral, como foi a visita?"
         )
+        
+        # Reagendar timeout após enviar mensagem esperando resposta
+        self.reagendar_timeout_apos_mensagem(update, context)
         
         return COMO_FOI_VISITA
 
@@ -465,6 +506,9 @@ class ChefBot:
             reply_markup=reply_markup
         )
         
+        # Reagendar timeout após enviar mensagem esperando resposta
+        self.reagendar_timeout_apos_mensagem(update, context)
+        
         return COMENTARIO_CLIENTE
 
     async def comentario_cliente(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -477,6 +521,8 @@ class ChefBot:
                 "Qual foi o comentário do cliente?",
                 reply_markup=ReplyKeyboardRemove()
             )
+            # Reagendar timeout após enviar mensagem esperando resposta
+            self.reagendar_timeout_apos_mensagem(update, context)
             return DETALHE_COMENTARIO
         else:
             context.user_data['relatorio']['tem_comentario'] = "Não"
@@ -744,6 +790,9 @@ class ChefBot:
                                 "Me envie quais foram os ingredientes/insumos que sobraram do último atendimento, seja o mais detalhista possível, pois isso vai impactar no próximo atendimento."
                             )
                             
+                            # Reagendar timeout após enviar mensagem esperando resposta
+                            self.reagendar_timeout_apos_mensagem(update, context)
+                            
                             return INVENTARIO_OPCAO
                         
                         # Processar inventário estruturado (nova estrutura do n8n)
@@ -806,6 +855,8 @@ class ChefBot:
             await update.message.reply_text(
                 "Me envie quais foram os ingredientes/insumos que sobraram do último atendimento, seja o mais detalhista possível, pois isso vai impactar no próximo atendimento."
             )
+            # Reagendar timeout após enviar mensagem esperando resposta
+            self.reagendar_timeout_apos_mensagem(update, context)
             return INVENTARIO_OPCAO
         except Exception as e:
             logger.error(f"❌ Erro ao processar inventário: {e}", exc_info=True)
@@ -817,6 +868,8 @@ class ChefBot:
             await update.message.reply_text(
                 "Me envie quais foram os ingredientes/insumos que sobraram do último atendimento, seja o mais detalhista possível, pois isso vai impactar no próximo atendimento."
             )
+            # Reagendar timeout após enviar mensagem esperando resposta
+            self.reagendar_timeout_apos_mensagem(update, context)
             return INVENTARIO_OPCAO
 
     async def confirmar_inventario(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -944,6 +997,9 @@ class ChefBot:
                 reply_markup=ReplyKeyboardRemove()
             )
             
+            # Reagendar timeout após enviar mensagem esperando resposta
+            self.reagendar_timeout_apos_mensagem(update, context)
+            
             return INVENTARIO_TEXTO
 
 
@@ -1016,6 +1072,9 @@ class ChefBot:
                 reply_markup=ReplyKeyboardRemove()
             )
             
+            # Reagendar timeout após enviar mensagem esperando resposta
+            self.reagendar_timeout_apos_mensagem(update, context)
+            
             return FOTO_ENTRADA
 
     async def itens_podem_vencer(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1030,6 +1089,9 @@ class ChefBot:
             parse_mode='Markdown',
             reply_markup=ReplyKeyboardRemove()
         )
+        
+        # Reagendar timeout após enviar mensagem esperando resposta
+        self.reagendar_timeout_apos_mensagem(update, context)
         
         return FOTO_ENTRADA
 
@@ -1722,9 +1784,9 @@ class ChefBot:
                                     # Verificar se precisa de inventário (Personal Shopper)
                                     personal_shopper = context.user_data.get('personal_shopper', 'Não') or context.user_data['relatorio'].get('personal_shopper', 'Não')
                                     
-                                    # Se Personal Shopper for "Não", pular inventário e finalizar
-                                    if personal_shopper and personal_shopper.lower() == 'não':
-                                        logger.info(f"⏭️ Pulando inventário - Personal Shopper = 'Não' para cliente {context.user_data['relatorio']['cliente_nome']}")
+                                    # Se Personal Shopper indicar que NÃO precisa de inventário, pular e finalizar
+                                    if not self.precisa_inventario(personal_shopper):
+                                        logger.info(f"⏭️ Pulando inventário - Personal Shopper = '{personal_shopper}' para cliente {context.user_data['relatorio']['cliente_nome']}")
                                         
                                         # Atualizar relatório no Notion para marcar como completo (sem inventário)
                                         # Isso será feito pelo n8n quando receber a FASE 1, mas vamos garantir aqui
@@ -1756,6 +1818,9 @@ class ChefBot:
                                         "Me envie quais foram os ingredientes/insumos que sobraram do último atendimento, seja o mais detalhista possível, pois isso vai impactar no próximo atendimento.\n\n"
                                         "Não se esqueça de pontuar temperos sensíveis como: Pimentas, Açafrão da terra, Canela, etc.."
                                     )
+                                    
+                                    # Reagendar timeout após enviar mensagem esperando resposta
+                                    self.reagendar_timeout_apos_mensagem(update, context)
                                     
                                     # Continuar com inventário (FASE 2)
                                     return INVENTARIO_OPCAO
