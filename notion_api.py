@@ -116,8 +116,16 @@ class NotionAPI:
                 "relation": {
                     "contains": chef_id
                 }
+            },
+            {
+                "property": "Status",
+                "select": {
+                    "equals": "Confirmado"
+                }
             }
         ]
+        
+        logger_notion.info(f"✅ Filtro aplicado: apenas atendimentos com status 'Confirmado'")
         
         # Adicionar filtro de relatório se solicitado
         if sem_relatorio:
