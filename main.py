@@ -140,8 +140,7 @@ class ChefBot:
             try:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="👋 Olá! Você ainda está aí?\n\n"
-                         "Se você não responder nos próximos 60 segundos, vou encerrar esta conversa."
+                    text="👋 Você ainda está aí? Quer continuar preenchendo o relatório?"
                 )
                 
                 # Agendar job para encerrar conversa após 60s
@@ -190,7 +189,7 @@ class ChefBot:
             try:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="⏱️ Vou encerrar sua conversa, ok? Caso você precise enviar outro relatório, basta iniciar novamente a conversa.",
+                    text="⏱️ Vou encerrar por aqui, caso queira enviar o formulário inicie novamente a conversa com o /relatorio",
                     reply_markup=ReplyKeyboardRemove()
                 )
                 
@@ -203,21 +202,34 @@ class ChefBot:
     def agendar_verificacao_timeout(self, user_id: int, chat_id: int, job_queue: JobQueue):
         """Agendar verificação de timeout para o usuário"""
         if not job_queue:
+            logger.warning(f"⚠️ agendar_verificacao_timeout: job_queue não disponível para user {user_id}")
             return
         
+        # Cancelar job anterior se existir
+        if user_id in user_activity and 'timeout_warning_job' in user_activity[user_id]:
+            try:
+                if user_activity[user_id]['timeout_warning_job']:
+                    user_activity[user_id]['timeout_warning_job'].schedule_removal()
+                    logger.debug(f"🔄 Cancelando timeout anterior para user {user_id}")
+            except Exception as e:
+                logger.debug(f"⚠️ Erro ao cancelar timeout anterior: {e}")
+        
         # Agendar verificação após 2 minutos (120 segundos)
-        warning_job = job_queue.run_once(
-            self.verificar_timeout_warning,
-            when=120,  # 2 minutos
-            data={'user_id': user_id, 'chat_id': chat_id}
-        )
-        
-        if user_id not in user_activity:
-            user_activity[user_id] = {}
-        
-        user_activity[user_id]['timeout_warning_job'] = warning_job
-        user_activity[user_id]['last_activity'] = datetime.now(BR_TZ)
-        logger.debug(f"⏱️ Verificação de timeout agendada para usuário {user_id} (2 minutos)")
+        try:
+            warning_job = job_queue.run_once(
+                self.verificar_timeout_warning,
+                when=120,  # 2 minutos
+                data={'user_id': user_id, 'chat_id': chat_id}
+            )
+            
+            if user_id not in user_activity:
+                user_activity[user_id] = {}
+            
+            user_activity[user_id]['timeout_warning_job'] = warning_job
+            user_activity[user_id]['last_activity'] = datetime.now(BR_TZ)
+            logger.info(f"⏱️ Verificação de timeout agendada para usuário {user_id} (2 minutos) - chat_id: {chat_id}")
+        except Exception as e:
+            logger.error(f"❌ Erro ao agendar timeout para user {user_id}: {e}", exc_info=True)
     
     def atualizar_atividade_handler(self, update: Update):
         """Helper para atualizar atividade em handlers"""
@@ -227,17 +239,25 @@ class ChefBot:
     def reagendar_timeout_apos_mensagem(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Reagendar timeout após bot enviar mensagem esperando resposta"""
         if not update or not update.effective_user:
+            logger.warning("⚠️ reagendar_timeout_apos_mensagem: update ou effective_user não disponível")
             return
         
         user_id = update.effective_user.id
         chat_id = update.effective_chat.id if update.effective_chat else None
         
-        if not chat_id or not context.job_queue:
+        if not chat_id:
+            logger.warning(f"⚠️ reagendar_timeout_apos_mensagem: chat_id não disponível para user {user_id}")
+            return
+        
+        # Verificar se job_queue está disponível
+        if not context.job_queue:
+            logger.warning(f"⚠️ reagendar_timeout_apos_mensagem: job_queue não disponível para user {user_id}")
             return
         
         # Atualizar atividade e reagendar timeout
         self.atualizar_atividade_usuario(user_id)
         self.agendar_verificacao_timeout(user_id, chat_id, context.job_queue)
+        logger.debug(f"⏱️ Timeout reagendado após mensagem para user {user_id}")
     
     def precisa_inventario(self, personal_shopper: str) -> bool:
         """Verificar se precisa de inventário baseado no personal_shopper"""
@@ -1591,6 +1611,9 @@ class ChefBot:
                     "foto_inventario_base64": "",
                     
                     # Personal Shopper (para determinar se precisa de inventário)
+                    # IMPORTANTE: O n8n deve usar este campo para definir o status no Notion:
+                    # - Se personal_shopper = "Não" (ou variações): Status = "Processar" (não precisa de inventário)
+                    # - Se personal_shopper != "Não": Status = "Criado - Aguardando Inventário" (precisa de inventário)
                     "personal_shopper": context.user_data.get('personal_shopper', 'Não') or context.user_data['relatorio'].get('personal_shopper', 'Não')
                 }
             }
@@ -1816,7 +1839,7 @@ class ChefBot:
                                     # Mensagem 3: Pedir inventário com informações sobre temperos sensíveis
                                     await update.message.reply_text(
                                         "Me envie quais foram os ingredientes/insumos que sobraram do último atendimento, seja o mais detalhista possível, pois isso vai impactar no próximo atendimento.\n\n"
-                                        "Não se esqueça de pontuar temperos sensíveis como: Pimentas, Açafrão da terra, Canela, etc.."
+                                        "Não se esqueça de pontuar temperos sensíveis como: Pimentas, Açafrão da terra, Canela, Sal, Zatar, etc.."
                                     )
                                     
                                     # Reagendar timeout após enviar mensagem esperando resposta
