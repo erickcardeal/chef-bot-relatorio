@@ -37,6 +37,7 @@ from telegram.ext import (
     ApplicationHandlerStop,
     JobQueue
 )
+from telegram.error import Conflict
 
 from config import (
     TELEGRAM_TOKEN,
@@ -2301,7 +2302,20 @@ def main():
     # Adicionar error handler
     async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
         """Handler de erros"""
-        logger.error(f"❌ Erro no bot: {context.error}", exc_info=context.error)
+        error = context.error
+        
+        # Tratar erro de conflito (múltiplas instâncias)
+        if isinstance(error, Conflict):
+            logger.error(
+                "❌ ERRO CRÍTICO: Múltiplas instâncias do bot detectadas!\n"
+                "   O Telegram não permite que mais de uma instância faça polling simultaneamente.\n"
+                "   Verifique se há outra instância rodando (local ou no Railway).\n"
+                "   Solução: Pare todas as instâncias e inicie apenas uma."
+            )
+            # Não tentar processar update em caso de conflito
+            return
+        
+        logger.error(f"❌ Erro no bot: {error}", exc_info=error)
         if update and isinstance(update, Update) and update.effective_message:
             try:
                 await update.effective_message.reply_text(
@@ -2314,7 +2328,24 @@ def main():
     
     # Iniciar bot
     logger.info("Bot iniciado! 🤖")
-    application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    logger.info("⚠️ IMPORTANTE: Certifique-se de que apenas UMA instância do bot está rodando!")
+    
+    try:
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES, 
+            drop_pending_updates=True,
+            close_loop=False
+        )
+    except Conflict as e:
+        logger.error(
+            "❌ ERRO CRÍTICO: Conflito detectado ao iniciar polling!\n"
+            "   Há outra instância do bot rodando.\n"
+            "   Pare todas as instâncias e tente novamente."
+        )
+        raise
+    except Exception as e:
+        logger.error(f"❌ Erro ao iniciar bot: {e}", exc_info=e)
+        raise
 
 if __name__ == '__main__':
     main()
