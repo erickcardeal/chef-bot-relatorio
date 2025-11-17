@@ -80,6 +80,10 @@ album_collector: Dict[int, Dict[str, Dict[str, Any]]] = {}
 # Estrutura: {user_id: {'last_activity': datetime, 'timeout_warning_job': Job, 'timeout_end_job': Job}}
 user_activity: Dict[int, Dict[str, Any]] = {}
 
+# Dicionário global para rastrear usuários que tiveram timeout encerrado
+# Estrutura: {user_id: True} - usuário teve conversa encerrada por timeout
+timeout_encerrados: Dict[int, bool] = {}
+
 # Timezone Brasil
 BR_TZ = pytz.timezone('America/Sao_Paulo')
 
@@ -194,6 +198,10 @@ class ChefBot:
                     reply_markup=ReplyKeyboardRemove()
                 )
                 
+                # Marcar usuário como tendo tido timeout encerrado
+                timeout_encerrados[user_id] = True
+                logger.info(f"⏱️ Usuário {user_id} marcado como timeout_encerrado")
+                
                 # Limpar dados do usuário
                 if user_id in user_activity:
                     del user_activity[user_id]
@@ -236,6 +244,37 @@ class ChefBot:
         """Helper para atualizar atividade em handlers"""
         if update and update.effective_user:
             self.atualizar_atividade_usuario(update.effective_user.id)
+    
+    def verificar_timeout_encerrado(self, user_id: int) -> bool:
+        """Verificar se usuário teve conversa encerrada por timeout"""
+        return timeout_encerrados.get(user_id, False)
+    
+    def limpar_timeout_encerrado(self, user_id: int):
+        """Limpar flag de timeout encerrado (quando usuário reinicia)"""
+        if user_id in timeout_encerrados:
+            del timeout_encerrados[user_id]
+            logger.debug(f"✅ Flag de timeout_encerrado removido para user {user_id}")
+    
+    async def verificar_e_tratar_timeout(self, update: Update) -> bool:
+        """Verificar se usuário teve timeout e tratar. Retorna True se teve timeout (deve encerrar)"""
+        if not update or not update.effective_user:
+            return False
+        
+        user_id = update.effective_user.id
+        
+        if self.verificar_timeout_encerrado(user_id):
+            logger.info(f"⏱️ Usuário {user_id} tentou continuar após timeout - pedindo para reiniciar")
+            try:
+                await update.message.reply_text(
+                    "⏱️ *Sua conversa anterior foi encerrada por inatividade.*\n\n"
+                    "Para continuar, por favor, inicie novamente a conversa com o comando /relatorio",
+                    parse_mode='Markdown',
+                    reply_markup=ReplyKeyboardRemove()
+                )
+            except:
+                pass
+            return True
+        return False
     
     def reagendar_timeout_apos_mensagem(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Reagendar timeout após bot enviar mensagem esperando resposta"""
@@ -334,6 +373,12 @@ class ChefBot:
         username = user.username
         user_id = user.id
         chat_id = update.effective_chat.id
+        
+        # Limpar flag de timeout encerrado (usuário está reiniciando)
+        self.limpar_timeout_encerrado(user_id)
+        
+        # Limpar dados anteriores se houver
+        context.user_data.clear()
         
         # Atualizar atividade e agendar verificação de timeout
         self.atualizar_atividade_usuario(user_id)
@@ -447,6 +492,10 @@ class ChefBot:
 
     async def selecionar_atendimento(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Selecionar atendimento para relatar"""
+        # Verificar se usuário teve timeout encerrado
+        if await self.verificar_e_tratar_timeout(update):
+            return ConversationHandler.END
+        
         # Atualizar atividade
         self.atualizar_atividade_usuario(update.effective_user.id)
         
@@ -502,6 +551,10 @@ class ChefBot:
 
     async def horario_chegada(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Registrar horário de chegada"""
+        # Verificar se usuário teve timeout encerrado
+        if await self.verificar_e_tratar_timeout(update):
+            return ConversationHandler.END
+        
         self.atualizar_atividade_handler(update)
         horario = update.message.text.strip()
         
@@ -519,6 +572,10 @@ class ChefBot:
 
     async def horario_saida(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Registrar horário de saída"""
+        # Verificar se usuário teve timeout encerrado
+        if await self.verificar_e_tratar_timeout(update):
+            return ConversationHandler.END
+        
         self.atualizar_atividade_handler(update)
         horario = update.message.text.strip()
         
