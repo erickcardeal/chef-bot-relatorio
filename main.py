@@ -1358,9 +1358,9 @@ class ChefBot:
                         if not album_data.get('message_sent', False):
                             # Mensagem dinâmica baseada na quantidade de fotos
                             if qtd_fotos == 1:
-                            mensagem_confirmacao = "✅ 1 foto de entrada recebida!\n\n"
-                        else:
-                            mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
+                                mensagem_confirmacao = "✅ 1 foto de entrada recebida!\n\n"
+                            else:
+                                mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
                         
                             await update.message.reply_text(
                                 mensagem_confirmacao +
