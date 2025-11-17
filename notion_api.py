@@ -1,5 +1,6 @@
 import requests
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from config import (
@@ -209,15 +210,35 @@ class NotionAPI:
                     personal_shopper_prop = props.get('Personal Shopper', {})
                     personal_shopper = None
                     
+                    # Log para debug: ver o que está vindo do Notion
+                    logger_notion.debug(f"🔍 Personal Shopper prop para {cliente_nome}: tipo={personal_shopper_prop.get('type')}, valor={personal_shopper_prop}")
+                    
                     # Verificar tipo da propriedade (pode ser select, checkbox, ou text)
                     if personal_shopper_prop.get('type') == 'select':
-                        personal_shopper = personal_shopper_prop.get('select', {}).get('name', '')
+                        select_value = personal_shopper_prop.get('select')
+                        if select_value is None:
+                            personal_shopper = ''
+                            logger_notion.debug(f"⚠️ Personal Shopper select é None para {cliente_nome}")
+                        else:
+                            personal_shopper = select_value.get('name', '')
+                            logger_notion.debug(f"✅ Personal Shopper select extraído: '{personal_shopper}' para {cliente_nome}")
                     elif personal_shopper_prop.get('type') == 'checkbox':
                         personal_shopper = 'Sim' if personal_shopper_prop.get('checkbox', False) else 'Não'
+                        logger_notion.debug(f"✅ Personal Shopper checkbox: '{personal_shopper}' para {cliente_nome}")
                     elif personal_shopper_prop.get('type') == 'rich_text':
                         rich_text = personal_shopper_prop.get('rich_text', [])
                         if rich_text and len(rich_text) > 0:
                             personal_shopper = rich_text[0].get('text', {}).get('content', '')
+                            logger_notion.debug(f"✅ Personal Shopper rich_text: '{personal_shopper}' para {cliente_nome}")
+                    else:
+                        logger_notion.warning(f"⚠️ Personal Shopper tipo desconhecido: {personal_shopper_prop.get('type')} para {cliente_nome}")
+                    
+                    # Se personal_shopper for string vazia ou None, usar 'Não' como padrão
+                    # Mas manter o valor original se for 'true', 'Sim', 'Misto', etc.
+                    personal_shopper_final = personal_shopper if personal_shopper else 'Não'
+                    
+                    # Log final do valor que será usado
+                    logger_notion.info(f"🔍 Personal Shopper final para {cliente_nome}: '{personal_shopper_final}' (original: '{personal_shopper}')")
                     
                     # Adicionar atendimento (já filtrado pela API do Notion, mas vamos verificar novamente)
                     # A API já filtra, mas vamos garantir
@@ -229,10 +250,10 @@ class NotionAPI:
                             'horario': horario,
                             'data': data_completa,
                             'data_formatada': data_str,
-                            'personal_shopper': personal_shopper or 'Não'  # Default para 'Não' se não encontrado
+                            'personal_shopper': personal_shopper_final
                         })
                         atendimentos_validos += 1
-                        logger_notion.info(f"✅ Atendimento válido: {cliente_nome} - {data_str} {horario} - Personal Shopper: {personal_shopper or 'Não'}")
+                        logger_notion.info(f"✅ Atendimento válido: {cliente_nome} - {data_str} {horario} - Personal Shopper: {personal_shopper_final}")
                     else:
                         data_fora_periodo += 1
                         logger_notion.debug(f"⚠️ Atendimento fora do período: {data_str} (período: {data_inicio} a {data_fim})")
