@@ -249,14 +249,34 @@ class ChefBot:
             logger.warning(f"⚠️ reagendar_timeout_apos_mensagem: chat_id não disponível para user {user_id}")
             return
         
-        # Verificar se job_queue está disponível
-        if not context.job_queue:
+        # Tentar obter job_queue de múltiplas formas
+        job_queue = None
+        
+        # Método 1: context.job_queue (padrão)
+        if hasattr(context, 'job_queue') and context.job_queue:
+            job_queue = context.job_queue
+            logger.debug(f"✅ job_queue obtido via context.job_queue para user {user_id}")
+        
+        # Método 2: context.application.job_queue (alternativa)
+        if not job_queue and hasattr(context, 'application') and context.application:
+            try:
+                if hasattr(context.application, 'job_queue') and context.application.job_queue:
+                    job_queue = context.application.job_queue
+                    logger.debug(f"✅ job_queue obtido via context.application.job_queue para user {user_id}")
+            except Exception as e:
+                logger.debug(f"⚠️ Erro ao acessar context.application.job_queue: {e}")
+        
+        if not job_queue:
             logger.warning(f"⚠️ reagendar_timeout_apos_mensagem: job_queue não disponível para user {user_id}")
+            logger.debug(f"   context tem job_queue? {hasattr(context, 'job_queue')}")
+            logger.debug(f"   context tem application? {hasattr(context, 'application')}")
+            if hasattr(context, 'application') and context.application:
+                logger.debug(f"   application tem job_queue? {hasattr(context.application, 'job_queue')}")
             return
         
         # Atualizar atividade e reagendar timeout
         self.atualizar_atividade_usuario(user_id)
-        self.agendar_verificacao_timeout(user_id, chat_id, context.job_queue)
+        self.agendar_verificacao_timeout(user_id, chat_id, job_queue)
         logger.debug(f"⏱️ Timeout reagendado após mensagem para user {user_id}")
     
     def precisa_inventario(self, personal_shopper: str) -> bool:
