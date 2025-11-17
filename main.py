@@ -2510,7 +2510,8 @@ def main():
         # Criar task para processar álbum após aguardar todas as fotos
         async def process_album_after_wait():
             """Processar álbum após aguardar todas as fotos"""
-            await asyncio.sleep(3)  # Aguardar 3 segundos
+            # Aguardar 5 segundos inicialmente (fotos do Telegram podem chegar com delay)
+            await asyncio.sleep(5)
             
             # Verificar se ainda temos o álbum
             if user_id not in album_collector or media_group_id not in album_collector[user_id]:
@@ -2525,10 +2526,14 @@ def main():
                 return
             
             # Verificar se ainda não recebemos mais fotos recentemente
-            tempo_decorrido = asyncio.get_event_loop().time() - album_data['last_update_time']
-            if tempo_decorrido < 2.0:  # Se recebemos foto recentemente (menos de 2s), não processar ainda
-                logger.info(f"⏳ Recebemos foto recentemente ({tempo_decorrido:.1f}s atrás), aguardando mais...")
-                return
+            # Aguardar até 3 segundos adicionais se fotos ainda estão chegando
+            for tentativa in range(3):  # Máximo 3 tentativas (3x 1s = 3s adicionais)
+                tempo_decorrido = asyncio.get_event_loop().time() - album_data['last_update_time']
+                if tempo_decorrido < 1.5:  # Se recebemos foto recentemente (menos de 1.5s), aguardar mais
+                    logger.info(f"⏳ Recebemos foto recentemente ({tempo_decorrido:.1f}s atrás), aguardando mais... (tentativa {tentativa + 1}/3)")
+                    await asyncio.sleep(1)  # Aguardar 1 segundo e verificar novamente
+                else:
+                    break  # Não recebemos foto recentemente, pode processar
             
             # Processar todas as fotos do álbum
             updates_album = album_data['updates']
