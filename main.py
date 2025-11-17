@@ -1581,6 +1581,9 @@ class ChefBot:
                         context.user_data['relatorio']['fotos_saida'] = fotos_processadas
                         context.user_data['relatorio']['foto_saida'] = fotos_processadas[0]['base64']
                         
+                        # Rastrear qual media_group_id foi usado para SAÍDA
+                        context.user_data['album_saida_media_group_id'] = media_group_id
+                        
                         # Processar e mostrar resumo (apenas uma vez)
                         if not album_data.get('message_sent', False):
                             await self.mostrar_resumo_fase1(update, context)
