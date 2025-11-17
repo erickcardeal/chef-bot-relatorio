@@ -205,6 +205,20 @@ class NotionAPI:
                         data_str = data_completa
                         horario = '??:??'
                     
+                    # Buscar propriedade Personal Shopper
+                    personal_shopper_prop = props.get('Personal Shopper', {})
+                    personal_shopper = None
+                    
+                    # Verificar tipo da propriedade (pode ser select, checkbox, ou text)
+                    if personal_shopper_prop.get('type') == 'select':
+                        personal_shopper = personal_shopper_prop.get('select', {}).get('name', '')
+                    elif personal_shopper_prop.get('type') == 'checkbox':
+                        personal_shopper = 'Sim' if personal_shopper_prop.get('checkbox', False) else 'Não'
+                    elif personal_shopper_prop.get('type') == 'rich_text':
+                        rich_text = personal_shopper_prop.get('rich_text', [])
+                        if rich_text and len(rich_text) > 0:
+                            personal_shopper = rich_text[0].get('text', {}).get('content', '')
+                    
                     # Adicionar atendimento (já filtrado pela API do Notion, mas vamos verificar novamente)
                     # A API já filtra, mas vamos garantir
                     if data_str and data_str >= data_inicio and data_str < data_fim:
@@ -214,10 +228,11 @@ class NotionAPI:
                             'cliente_id': cliente_id,
                             'horario': horario,
                             'data': data_completa,
-                            'data_formatada': data_str
+                            'data_formatada': data_str,
+                            'personal_shopper': personal_shopper or 'Não'  # Default para 'Não' se não encontrado
                         })
                         atendimentos_validos += 1
-                        logger_notion.info(f"✅ Atendimento válido: {cliente_nome} - {data_str} {horario}")
+                        logger_notion.info(f"✅ Atendimento válido: {cliente_nome} - {data_str} {horario} - Personal Shopper: {personal_shopper or 'Não'}")
                     else:
                         data_fora_periodo += 1
                         logger_notion.debug(f"⚠️ Atendimento fora do período: {data_str} (período: {data_inicio} a {data_fim})")

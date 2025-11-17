@@ -34,7 +34,8 @@ from telegram.ext import (
     ConversationHandler,
     ContextTypes,
     filters,
-    ApplicationHandlerStop
+    ApplicationHandlerStop,
+    JobQueue
 )
 
 from config import (
@@ -74,6 +75,10 @@ logger = logging.getLogger(__name__)
 # Estrutura: {user_id: {media_group_id: {'updates': [Update, ...], 'processed': bool, 'task': Task}}}
 album_collector: Dict[int, Dict[str, Dict[str, Any]]] = {}
 
+# Dicionário global para rastrear última atividade do usuário e jobs de timeout
+# Estrutura: {user_id: {'last_activity': datetime, 'timeout_warning_job': Job, 'timeout_end_job': Job}}
+user_activity: Dict[int, Dict[str, Any]] = {}
+
 # Timezone Brasil
 BR_TZ = pytz.timezone('America/Sao_Paulo')
 
@@ -89,6 +94,135 @@ class ChefBot:
         """Inicializar o bot com API do Notion"""
         self.notion = NotionAPI(NOTION_API_KEY)
         self.user_data: Dict[str, Dict] = {}
+    
+    def atualizar_atividade_usuario(self, user_id: int):
+        """Atualizar timestamp da última atividade do usuário e cancelar jobs de timeout"""
+        agora = datetime.now(BR_TZ)
+        if user_id not in user_activity:
+            user_activity[user_id] = {}
+        
+        user_activity[user_id]['last_activity'] = agora
+        
+        # Cancelar jobs de timeout existentes
+        if 'timeout_warning_job' in user_activity[user_id] and user_activity[user_id]['timeout_warning_job']:
+            try:
+                user_activity[user_id]['timeout_warning_job'].schedule_removal()
+            except:
+                pass
+        
+        if 'timeout_end_job' in user_activity[user_id] and user_activity[user_id]['timeout_end_job']:
+            try:
+                user_activity[user_id]['timeout_end_job'].schedule_removal()
+            except:
+                pass
+        
+        logger.debug(f"⏱️ Atividade atualizada para usuário {user_id}")
+    
+    async def verificar_timeout_warning(self, context: ContextTypes.DEFAULT_TYPE):
+        """Verificar se usuário está inativo há 2 minutos e enviar aviso"""
+        user_id = context.job.data.get('user_id')
+        chat_id = context.job.data.get('chat_id')
+        
+        if user_id not in user_activity:
+            return
+        
+        ultima_atividade = user_activity[user_id].get('last_activity')
+        if not ultima_atividade:
+            return
+        
+        # Verificar se ainda está inativo (2 minutos)
+        agora = datetime.now(BR_TZ)
+        tempo_inativo = (agora - ultima_atividade).total_seconds()
+        
+        if tempo_inativo >= 120:  # 2 minutos
+            logger.info(f"⏱️ Usuário {user_id} inativo há {tempo_inativo:.0f}s - enviando aviso")
+            
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="👋 Olá! Você ainda está aí?\n\n"
+                         "Se você não responder nos próximos 60 segundos, vou encerrar esta conversa."
+                )
+                
+                # Agendar job para encerrar conversa após 60s
+                job_queue = context.job_queue
+                if job_queue:
+                    end_job = job_queue.run_once(
+                        self.encerrar_conversa_timeout,
+                        when=60,  # 60 segundos
+                        data={'user_id': user_id, 'chat_id': chat_id}
+                    )
+                    user_activity[user_id]['timeout_end_job'] = end_job
+            except Exception as e:
+                logger.error(f"❌ Erro ao enviar aviso de timeout: {e}")
+        else:
+            # Ainda não completou 2 minutos, reagendar verificação
+            tempo_restante = 120 - tempo_inativo
+            if tempo_restante > 0:
+                job_queue = context.job_queue
+                if job_queue:
+                    warning_job = job_queue.run_once(
+                        self.verificar_timeout_warning,
+                        when=int(tempo_restante),
+                        data={'user_id': user_id, 'chat_id': chat_id}
+                    )
+                    user_activity[user_id]['timeout_warning_job'] = warning_job
+    
+    async def encerrar_conversa_timeout(self, context: ContextTypes.DEFAULT_TYPE):
+        """Encerrar conversa após timeout"""
+        user_id = context.job.data.get('user_id')
+        chat_id = context.job.data.get('chat_id')
+        
+        if user_id not in user_activity:
+            return
+        
+        ultima_atividade = user_activity[user_id].get('last_activity')
+        if not ultima_atividade:
+            return
+        
+        # Verificar se ainda está inativo (3 minutos total = 2min + 60s)
+        agora = datetime.now(BR_TZ)
+        tempo_inativo = (agora - ultima_atividade).total_seconds()
+        
+        if tempo_inativo >= 180:  # 3 minutos total
+            logger.info(f"⏱️ Encerrando conversa do usuário {user_id} por timeout ({tempo_inativo:.0f}s inativo)")
+            
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="⏱️ Vou encerrar sua conversa, ok? Caso você precise enviar outro relatório, basta iniciar novamente a conversa.",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+                
+                # Limpar dados do usuário
+                if user_id in user_activity:
+                    del user_activity[user_id]
+            except Exception as e:
+                logger.error(f"❌ Erro ao encerrar conversa por timeout: {e}")
+    
+    def agendar_verificacao_timeout(self, user_id: int, chat_id: int, job_queue: JobQueue):
+        """Agendar verificação de timeout para o usuário"""
+        if not job_queue:
+            return
+        
+        # Agendar verificação após 2 minutos (120 segundos)
+        warning_job = job_queue.run_once(
+            self.verificar_timeout_warning,
+            when=120,  # 2 minutos
+            data={'user_id': user_id, 'chat_id': chat_id}
+        )
+        
+        if user_id not in user_activity:
+            user_activity[user_id] = {}
+        
+        user_activity[user_id]['timeout_warning_job'] = warning_job
+        user_activity[user_id]['last_activity'] = datetime.now(BR_TZ)
+        logger.debug(f"⏱️ Verificação de timeout agendada para usuário {user_id} (2 minutos)")
+    
+    def atualizar_atividade_handler(self, update: Update):
+        """Helper para atualizar atividade em handlers"""
+        if update and update.effective_user:
+            self.atualizar_atividade_usuario(update.effective_user.id)
         
     def format_date(self, date_str: str) -> str:
         """Formatar data para exibição"""
@@ -125,8 +259,15 @@ class ChefBot:
         """Comando /relatorio - Iniciar conversa e identificar chef"""
         user = update.effective_user
         username = user.username
+        user_id = user.id
+        chat_id = update.effective_chat.id
         
-        logger.info(f"🔵 Chef iniciou conversa: @{username} (ID: {user.id})")
+        # Atualizar atividade e agendar verificação de timeout
+        self.atualizar_atividade_usuario(user_id)
+        if context.job_queue:
+            self.agendar_verificacao_timeout(user_id, chat_id, context.job_queue)
+        
+        logger.info(f"🔵 Chef iniciou conversa: @{username} (ID: {user_id})")
         
         # Buscar chef no Notion pelo username (sem @)
         logger.info(f"🔄 Buscando chef no Notion para @{username}...")
@@ -233,6 +374,9 @@ class ChefBot:
 
     async def selecionar_atendimento(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Selecionar atendimento para relatar"""
+        # Atualizar atividade
+        self.atualizar_atividade_usuario(update.effective_user.id)
+        
         texto = update.message.text
         
         # Extrair nome do cliente (antes do " - ")
@@ -252,11 +396,12 @@ class ChefBot:
             )
             return ConversationHandler.END
         
-        # Salvar dados do atendimento
+        # Salvar dados do atendimento (incluindo Personal Shopper)
         context.user_data['cliente_nome'] = atendimento['cliente_nome']
         context.user_data['cliente_id'] = atendimento.get('cliente_id', '')
         context.user_data['atendimento_id'] = atendimento.get('id', '')
         context.user_data['data_atendimento'] = atendimento.get('data', datetime.now(BR_TZ).strftime("%Y-%m-%d"))
+        context.user_data['personal_shopper'] = atendimento.get('personal_shopper', 'Não')
         
         # Inicializar estrutura de dados do relatório
         context.user_data['relatorio'] = {
@@ -266,8 +411,11 @@ class ChefBot:
             'cliente_id': atendimento.get('cliente_id', ''),
             'atendimento_id': atendimento.get('id', ''),
             'data_atendimento': atendimento.get('data', datetime.now(BR_TZ).strftime("%Y-%m-%d")),
-            'timestamp_inicio': datetime.now(BR_TZ).isoformat()
+            'timestamp_inicio': datetime.now(BR_TZ).isoformat(),
+            'personal_shopper': atendimento.get('personal_shopper', 'Não')
         }
+        
+        logger.info(f"📋 Atendimento selecionado: {cliente_nome} - Personal Shopper: {atendimento.get('personal_shopper', 'Não')}")
         
         await update.message.reply_text(
             "Qual foi o horário de chegada?",
@@ -278,6 +426,7 @@ class ChefBot:
 
     async def horario_chegada(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Registrar horário de chegada"""
+        self.atualizar_atividade_handler(update)
         horario = update.message.text.strip()
         
         # Salvar horário de chegada (sem validação rigorosa, normalizar no n8n)
@@ -291,6 +440,7 @@ class ChefBot:
 
     async def horario_saida(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Registrar horário de saída"""
+        self.atualizar_atividade_handler(update)
         horario = update.message.text.strip()
         
         # Salvar horário de saída (sem validação rigorosa, normalizar no n8n)
@@ -304,6 +454,7 @@ class ChefBot:
 
     async def como_foi_visita(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Receber descrição de como foi a visita"""
+        self.atualizar_atividade_handler(update)
         context.user_data['relatorio']['como_foi_visita'] = update.message.text
         
         keyboard = [["✅ Sim"], ["❌ Não"]]
@@ -439,6 +590,7 @@ class ChefBot:
 
     async def inventario_opcao(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Receber inventário (foto ou texto) - FASE 2A (processar imediatamente)"""
+        self.atualizar_atividade_handler(update)
         
         # Verifica se é foto
         if update.message.photo:
@@ -475,6 +627,7 @@ class ChefBot:
 
     async def processar_inventario(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Processar inventário com n8n FASE 2A (busca fuzzy + Claude se necessário)"""
+        self.atualizar_atividade_handler(update)
         
         # Mensagem inicial de processamento
         await update.message.reply_text(
@@ -668,6 +821,7 @@ class ChefBot:
 
     async def confirmar_inventario(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Confirmar ou corrigir inventário processado (FASE 2A) e salvar no Notion (FASE 2B)"""
+        self.atualizar_atividade_handler(update)
         resposta = update.message.text
         
         if '✅' in resposta:
@@ -1372,7 +1526,10 @@ class ChefBot:
                     # Inventário (vazio na FASE 1 - será preenchido na FASE 2)
                     "inventario_atualizado": "Não",
                     "inventario_texto": "",
-                    "foto_inventario_base64": ""
+                    "foto_inventario_base64": "",
+                    
+                    # Personal Shopper (para determinar se precisa de inventário)
+                    "personal_shopper": context.user_data.get('personal_shopper', 'Não') or context.user_data['relatorio'].get('personal_shopper', 'Não')
                 }
             }
             
@@ -1561,6 +1718,33 @@ class ChefBot:
                                         parse_mode='Markdown',
                                         reply_markup=ReplyKeyboardRemove()
                                     )
+                                    
+                                    # Verificar se precisa de inventário (Personal Shopper)
+                                    personal_shopper = context.user_data.get('personal_shopper', 'Não') or context.user_data['relatorio'].get('personal_shopper', 'Não')
+                                    
+                                    # Se Personal Shopper for "Não", pular inventário e finalizar
+                                    if personal_shopper and personal_shopper.lower() == 'não':
+                                        logger.info(f"⏭️ Pulando inventário - Personal Shopper = 'Não' para cliente {context.user_data['relatorio']['cliente_nome']}")
+                                        
+                                        # Atualizar relatório no Notion para marcar como completo (sem inventário)
+                                        # Isso será feito pelo n8n quando receber a FASE 1, mas vamos garantir aqui
+                                        await update.message.reply_text(
+                                            "✅ *Relatório finalizado!*\n\n"
+                                            "Este atendimento não requer inventário.\n\n"
+                                            "Caso você queira enviar outro relatório de visita, basta iniciar novamente a conversa.\n\n"
+                                            "Let's cook!",
+                                            parse_mode='Markdown',
+                                            reply_markup=ReplyKeyboardRemove()
+                                        )
+                                        
+                                        # Limpar dados e finalizar
+                                        context.user_data.clear()
+                                        if update.effective_user.id in user_activity:
+                                            del user_activity[update.effective_user.id]
+                                        return ConversationHandler.END
+                                    
+                                    # Se Personal Shopper não for "Não", continuar com inventário
+                                    logger.info(f"📦 Continuando com inventário - Personal Shopper = '{personal_shopper}' para cliente {context.user_data['relatorio']['cliente_nome']}")
                                     
                                     # Mensagem 2: Agora vamos seguir para o inventário
                                     await update.message.reply_text(
