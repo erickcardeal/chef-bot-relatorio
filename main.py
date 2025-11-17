@@ -1346,15 +1346,16 @@ class ChefBot:
                     if qtd_fotos == 0:
                         logger.error(f"❌ Álbum processado mas sem fotos após espera. Processando como foto única.")
                         is_album = False  # Forçar processamento como foto única
+                        # Não continuar com processamento de álbum - pular para processamento de foto única
                     else:
                         logger.info(f"✅ Álbum já processado! Usando {qtd_fotos} foto(s) coletada(s) (media_group_id: {media_group_id})")
                         
                         # Atualizar relatório com todas as fotos
                         context.user_data['relatorio']['fotos_entrada'] = fotos_processadas
                         context.user_data['relatorio']['foto_entrada'] = fotos_processadas[0]['base64']
-                    
-                    # Enviar mensagem de confirmação e pedir foto de saída (apenas uma vez)
-                    if not album_data.get('message_sent', False):
+                        
+                        # Enviar mensagem de confirmação e pedir foto de saída (apenas uma vez)
+                        if not album_data.get('message_sent', False):
                         # Mensagem dinâmica baseada na quantidade de fotos
                         if qtd_fotos == 1:
                             mensagem_confirmacao = "✅ 1 foto de entrada recebida!\n\n"
@@ -1561,15 +1562,16 @@ class ChefBot:
                     if qtd_fotos == 0:
                         logger.error(f"❌ Álbum processado mas sem fotos após espera. Processando como foto única.")
                         is_album = False  # Forçar processamento como foto única
+                        # Não continuar com processamento de álbum - pular para processamento de foto única
                     else:
                         logger.info(f"✅ Álbum já processado! Usando {qtd_fotos} foto(s) coletada(s) (media_group_id: {media_group_id})")
                         
                         # Atualizar relatório com todas as fotos
                         context.user_data['relatorio']['fotos_saida'] = fotos_processadas
                         context.user_data['relatorio']['foto_saida'] = fotos_processadas[0]['base64']
-                    
-                    # Processar e mostrar resumo (apenas uma vez)
-                    if not album_data.get('message_sent', False):
+                        
+                        # Processar e mostrar resumo (apenas uma vez)
+                        if not album_data.get('message_sent', False):
                         await self.mostrar_resumo_fase1(update, context)
                         album_data['message_sent'] = True
                         return RESUMO_FASE1
