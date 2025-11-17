@@ -1354,6 +1354,9 @@ class ChefBot:
                         context.user_data['relatorio']['fotos_entrada'] = fotos_processadas
                         context.user_data['relatorio']['foto_entrada'] = fotos_processadas[0]['base64']
                         
+                        # Rastrear qual media_group_id foi usado para ENTRADA
+                        context.user_data['album_entrada_media_group_id'] = media_group_id
+                        
                         # Enviar mensagem de confirmação e pedir foto de saída (apenas uma vez)
                         if not album_data.get('message_sent', False):
                             # Mensagem dinâmica baseada na quantidade de fotos
@@ -1537,6 +1540,14 @@ class ChefBot:
             message_id = update.message.message_id
             
             logger.info(f"🔍 [FOTO SAÍDA] Foto recebida - message_id: {message_id}, media_group_id: {media_group_id}, estado_atual: FOTO_SAIDA")
+            
+            # IMPORTANTE: Verificar se este media_group_id foi usado para ENTRADA
+            # Se sim, esta foto ainda é de ENTRADA (chegou atrasada), não de SAÍDA
+            album_entrada_media_group_id = context.user_data.get('album_entrada_media_group_id')
+            if album_entrada_media_group_id and media_group_id == album_entrada_media_group_id:
+                logger.warning(f"⚠️ Foto chegou no estado FOTO_SAIDA mas é do mesmo media_group_id de ENTRADA ({media_group_id}). Tratando como ENTRADA atrasada.")
+                # Reprocessar como ENTRADA - chamar foto_entrada novamente
+                return await self.foto_entrada(update, context)
             
             # Verificar se o álbum já foi processado pelo handler global
             if user_id in album_collector and media_group_id in album_collector[user_id]:
