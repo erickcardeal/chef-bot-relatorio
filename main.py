@@ -64,6 +64,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Verificar se notion_api.py está sendo importado corretamente
+import os
+import notion_api
+notion_api_path = os.path.abspath(notion_api.__file__)
+logger.info(f"📁 notion_api.py importado de: {notion_api_path}")
+logger.info(f"📁 Arquivos Python no diretório: {[f for f in os.listdir('.') if f.endswith('.py')]}")
+
 # Estados da conversa
 (SELECIONAR_ATENDIMENTO, HORARIO_CHEGADA, HORARIO_SAIDA, COMO_FOI_VISITA,
  COMENTARIO_CLIENTE, DETALHE_COMENTARIO, PROBLEMA_ESPECIFICO, DETALHE_PROBLEMA,
