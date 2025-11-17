@@ -255,6 +255,32 @@ class ChefBot:
             del timeout_encerrados[user_id]
             logger.debug(f"✅ Flag de timeout_encerrado removido para user {user_id}")
     
+    def limpar_todos_dados_usuario(self, user_id: int, context: ContextTypes.DEFAULT_TYPE):
+        """Limpar todos os dados do usuário: user_data, user_activity e timeout_encerrados"""
+        # Limpar user_data
+        context.user_data.clear()
+        
+        # Limpar user_activity
+        if user_id in user_activity:
+            # Cancelar jobs de timeout se existirem
+            if 'timeout_warning_job' in user_activity[user_id] and user_activity[user_id]['timeout_warning_job']:
+                try:
+                    user_activity[user_id]['timeout_warning_job'].schedule_removal()
+                except:
+                    pass
+            if 'timeout_end_job' in user_activity[user_id] and user_activity[user_id]['timeout_end_job']:
+                try:
+                    user_activity[user_id]['timeout_end_job'].schedule_removal()
+                except:
+                    pass
+            del user_activity[user_id]
+        
+        # Limpar timeout_encerrados
+        if user_id in timeout_encerrados:
+            del timeout_encerrados[user_id]
+        
+        logger.debug(f"✅ Todos os dados do usuário {user_id} foram limpos")
+    
     async def verificar_e_tratar_timeout(self, update: Update) -> bool:
         """Verificar se usuário teve timeout e tratar. Retorna True se teve timeout (deve encerrar)"""
         if not update or not update.effective_user:
@@ -1059,8 +1085,8 @@ class ChefBot:
                                 reply_markup=ReplyKeyboardRemove()
                             )
                             
-                            # Limpar dados
-                            context.user_data.clear()
+                            # Limpar todos os dados do usuário
+                            self.limpar_todos_dados_usuario(update.effective_user.id, context)
                             return ConversationHandler.END
                         else:
                             response_text = await response.text()
@@ -1930,10 +1956,8 @@ class ChefBot:
                                             reply_markup=ReplyKeyboardRemove()
                                         )
                                         
-                                        # Limpar dados e finalizar
-                                        context.user_data.clear()
-                                        if update.effective_user.id in user_activity:
-                                            del user_activity[update.effective_user.id]
+                                        # Limpar todos os dados do usuário e finalizar
+                                        self.limpar_todos_dados_usuario(update.effective_user.id, context)
                                         return ConversationHandler.END
                                     
                                     # Se Personal Shopper não for "Não", continuar com inventário
@@ -2021,9 +2045,8 @@ class ChefBot:
                                                                 parse_mode='Markdown',
                                                                 reply_markup=ReplyKeyboardRemove()
                                                             )
-                                                            context.user_data.clear()
-                                                            if update.effective_user.id in user_activity:
-                                                                del user_activity[update.effective_user.id]
+                                                            # Limpar todos os dados do usuário e finalizar
+                                                            self.limpar_todos_dados_usuario(update.effective_user.id, context)
                                                             return ConversationHandler.END
                                                         
                                                         # Se Personal Shopper não for "Não", continuar com inventário
