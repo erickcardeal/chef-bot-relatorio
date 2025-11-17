@@ -102,19 +102,19 @@ class NotionAPI:
         print(f"[NOTION_API] 🔍 Buscando atendimentos do chef {chef_id[:8]}... de {data_inicio} até {data_fim} (exclusivo) - {filtro_tipo}")
         logger_notion.info(f"🔍 [NOTION] Buscando atendimentos do chef {chef_id[:8]}... de {data_inicio} até {data_fim} (exclusivo) - {filtro_tipo}")
         
-        # Construir filtros base
+        # Construir filtros base (ordem otimizada: mais restritivo primeiro)
         filtros = [
+            {
+                "property": "Chef Alocado",
+                "relation": {
+                    "contains": chef_id
+                }
+            },
             {
                 "property": "Date",
                 "date": {
                     "on_or_after": data_inicio,
                     "before": data_fim
-                }
-            },
-            {
-                "property": "Chef Alocado",
-                "relation": {
-                    "contains": chef_id
                 }
             },
             {

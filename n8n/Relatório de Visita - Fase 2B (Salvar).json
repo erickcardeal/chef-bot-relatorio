@@ -125,7 +125,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  properties: {\n    'Inventário Atendimento': {\n      rich_text: [\n        {\n          text: {\n            content: $('Code - Formatar Dados').item.json.inventario_formatado || ''\n          }\n        }\n      ]\n    },\n    'Inventário atualizado?': {\n      select: {\n        name: 'Sim'\n      }\n    },\n    'Status': {\n      select: {\n        name: 'Inventário Completo'\n      }\n    }\n  }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  properties: {\n    'Inventário Atendimento': {\n      rich_text: [\n        {\n          text: {\n            content: $('Code - Formatar Dados').item.json.inventario_formatado || ''\n          }\n        }\n      ]\n    },\n    'Inventário atualizado?': {\n      select: {\n        name: 'Sim'\n      }\n    },\n    'Status': {\n      select: {\n        name: 'Processar'\n      }\n    }\n  }\n}) }}",
         "options": {}
       },
       "id": "f48a6f35-3b90-4b6a-af94-5b1bc047a900",
