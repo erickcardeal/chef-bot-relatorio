@@ -211,7 +211,7 @@ class ChefBot:
     def agendar_verificacao_timeout(self, user_id: int, chat_id: int, job_queue: JobQueue):
         """Agendar verificação de timeout para o usuário"""
         if not job_queue:
-            logger.warning(f"⚠️ agendar_verificacao_timeout: job_queue não disponível para user {user_id}")
+            logger.debug(f"⚠️ agendar_verificacao_timeout: job_queue não disponível para user {user_id}")
             return
         
         # Cancelar job anterior se existir
@@ -279,14 +279,14 @@ class ChefBot:
     def reagendar_timeout_apos_mensagem(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Reagendar timeout após bot enviar mensagem esperando resposta"""
         if not update or not update.effective_user:
-            logger.warning("⚠️ reagendar_timeout_apos_mensagem: update ou effective_user não disponível")
+            logger.debug("⚠️ reagendar_timeout_apos_mensagem: update ou effective_user não disponível")
             return
         
         user_id = update.effective_user.id
         chat_id = update.effective_chat.id if update.effective_chat else None
         
         if not chat_id:
-            logger.warning(f"⚠️ reagendar_timeout_apos_mensagem: chat_id não disponível para user {user_id}")
+            logger.debug(f"⚠️ reagendar_timeout_apos_mensagem: chat_id não disponível para user {user_id}")
             return
         
         # Tentar obter job_queue de múltiplas formas
@@ -307,7 +307,7 @@ class ChefBot:
                 logger.debug(f"⚠️ Erro ao acessar context.application.job_queue: {e}")
         
         if not job_queue:
-            logger.warning(f"⚠️ reagendar_timeout_apos_mensagem: job_queue não disponível para user {user_id}")
+            logger.debug(f"⚠️ reagendar_timeout_apos_mensagem: job_queue não disponível para user {user_id}")
             logger.debug(f"   context tem job_queue? {hasattr(context, 'job_queue')}")
             logger.debug(f"   context tem application? {hasattr(context, 'application')}")
             if hasattr(context, 'application') and context.application:
@@ -397,7 +397,7 @@ class ChefBot:
             chef_data = None
         
         if not chef_data:
-            logger.warning(f"⚠️ Chef não encontrado para @{username}")
+            logger.info(f"⚠️ Chef não encontrado para @{username}")
             await update.message.reply_text(
                 "❌ Chef não encontrado no sistema.\n\n"
                 "Por favor, entre em contato com o time de tecnologia para resolver este problema."
@@ -1298,7 +1298,7 @@ class ChefBot:
                                 return FOTO_SAIDA
                     
                     # Se ainda não foi processado após 5 segundos, processar como foto única (fallback)
-                    logger.warning(f"⚠️ Álbum não processado após {tempo_max_espera}s. Processando como foto única (media_group_id: {media_group_id})")
+                    logger.debug(f"⚠️ Álbum não processado após {tempo_max_espera}s. Processando como foto única (media_group_id: {media_group_id})")
                     # Continuar com processamento normal de foto única
                     is_album = False  # Forçar processamento como foto única
             else:
@@ -1466,7 +1466,7 @@ class ChefBot:
                                     return RESUMO_FASE1
                     
                     # Se ainda não foi processado após 5 segundos, processar como foto única (fallback)
-                    logger.warning(f"⚠️ Álbum não processado após {tempo_max_espera}s. Processando como foto única (media_group_id: {media_group_id})")
+                    logger.debug(f"⚠️ Álbum não processado após {tempo_max_espera}s. Processando como foto única (media_group_id: {media_group_id})")
                     is_album = False  # Forçar processamento como foto única
             else:
                 # Álbum não encontrado no coletor - aguardar processamento
@@ -2246,7 +2246,7 @@ def main():
             
             # Verificar se ainda temos o álbum
             if user_id not in album_collector or media_group_id not in album_collector[user_id]:
-                logger.warning(f"⚠️ Álbum {media_group_id} não encontrado durante processamento")
+                logger.debug(f"⚠️ Álbum {media_group_id} não encontrado durante processamento")
                 return
             
             album_data = album_collector[user_id][media_group_id]
