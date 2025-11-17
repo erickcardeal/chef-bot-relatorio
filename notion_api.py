@@ -239,6 +239,8 @@ class NotionAPI:
                     
                     # Se personal_shopper for string vazia ou None, usar 'Não' como padrão
                     # Mas manter o valor original se for 'true', 'Sim', 'Misto', etc.
+                    # IMPORTANTE: Se o valor for 'true', 'Sim', 'Misto', etc., deve ser mantido!
+                    logger_notion.info(f"🔍 [NOTION] ANTES da conversão - personal_shopper: '{personal_shopper}' (tipo: {type(personal_shopper).__name__}, bool(personal_shopper)={bool(personal_shopper)})")
                     personal_shopper_final = personal_shopper if personal_shopper else 'Não'
                     
                     # Log final do valor que será usado

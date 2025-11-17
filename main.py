@@ -476,6 +476,11 @@ class ChefBot:
         try:
             atendimentos = await self.notion.buscar_atendimentos_chef(chef_id, dias=7)
             logger.info(f"✅ Atendimentos encontrados: {len(atendimentos) if atendimentos else 0}")
+            
+            # Log detalhado do personal_shopper de cada atendimento
+            if atendimentos:
+                for atend in atendimentos:
+                    logger.info(f"🔍 [BOT] Atendimento encontrado: {atend.get('cliente_nome', 'N/A')} - Personal Shopper: '{atend.get('personal_shopper', 'NÃO ENCONTRADO')}' (tipo: {type(atend.get('personal_shopper')).__name__})")
         except Exception as e:
             logger.error(f"❌ Erro ao buscar atendimentos: {e}", exc_info=True)
             atendimentos = []
