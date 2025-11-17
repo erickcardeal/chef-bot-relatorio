@@ -587,7 +587,7 @@ class ChefBot:
         # Obter personal_shopper do atendimento e logar tipo e valor
         personal_shopper_raw = atendimento.get('personal_shopper', 'Não')
         context.user_data['personal_shopper'] = personal_shopper_raw
-        logger.debug(f"🔍 Personal Shopper obtido do atendimento: valor='{personal_shopper_raw}', tipo={type(personal_shopper_raw).__name__}")
+        logger.info(f"🔍 [BOT] Personal Shopper obtido do atendimento: valor='{personal_shopper_raw}', tipo={type(personal_shopper_raw).__name__}, atendimento_completo={atendimento}")
         
         # Inicializar estrutura de dados do relatório
         context.user_data['relatorio'] = {
@@ -601,7 +601,7 @@ class ChefBot:
             'personal_shopper': personal_shopper_raw
         }
         
-        logger.info(f"📋 Atendimento selecionado: {cliente_nome} - Personal Shopper: {personal_shopper_raw} (tipo: {type(personal_shopper_raw).__name__})")
+        logger.info(f"📋 [BOT] Atendimento selecionado: {cliente_nome} - Personal Shopper: {personal_shopper_raw} (tipo: {type(personal_shopper_raw).__name__})")
         
         await update.message.reply_text(
             "Qual foi o horário de chegada?",
@@ -1760,6 +1760,11 @@ class ChefBot:
                 }
             }
             
+            # Log do personal_shopper que será enviado no payload
+            personal_shopper_payload = payload['body']['personal_shopper']
+            logger.info(f"🔍 [BOT] Personal Shopper no payload FASE 1: '{personal_shopper_payload}' (tipo: {type(personal_shopper_payload).__name__})")
+            logger.info(f"🔍 [BOT] Valores antes de montar payload: context.user_data['personal_shopper']='{context.user_data.get('personal_shopper', 'NÃO ENCONTRADO')}', relatorio['personal_shopper']='{context.user_data['relatorio'].get('personal_shopper', 'NÃO ENCONTRADO')}'")
+            
             # Enviar para n8n FASE 1 (webhook específico da FASE 1)
             webhook_url_fase1 = N8N_WEBHOOK_URL_FASE1 or N8N_WEBHOOK_URL
             logger.info(f"🔄 Enviando FASE 1 para webhook: {webhook_url_fase1}")
@@ -1979,12 +1984,15 @@ class ChefBot:
                                     # Verificar se precisa de inventário (Personal Shopper)
                                     personal_shopper = context.user_data.get('personal_shopper', 'Não') or context.user_data['relatorio'].get('personal_shopper', 'Não')
                                     
-                                    # Log para debug: tipo e valor do personal_shopper
-                                    logger.debug(f"🔍 Verificando inventário - Personal Shopper: valor='{personal_shopper}', tipo={type(personal_shopper).__name__}, precisa_inventario={self.precisa_inventario(personal_shopper)}")
+                                    # Log detalhado: tipo e valor do personal_shopper
+                                    logger.info(f"🔍 [BOT] Verificando inventário - Personal Shopper: valor='{personal_shopper}', tipo={type(personal_shopper).__name__}")
+                                    logger.info(f"🔍 [BOT] context.user_data['personal_shopper'] = '{context.user_data.get('personal_shopper', 'NÃO ENCONTRADO')}'")
+                                    logger.info(f"🔍 [BOT] context.user_data['relatorio']['personal_shopper'] = '{context.user_data['relatorio'].get('personal_shopper', 'NÃO ENCONTRADO')}'")
+                                    logger.info(f"🔍 [BOT] precisa_inventario('{personal_shopper}') = {self.precisa_inventario(personal_shopper)}")
                                     
                                     # Se Personal Shopper indicar que NÃO precisa de inventário, pular e finalizar
                                     if not self.precisa_inventario(personal_shopper):
-                                        logger.info(f"⏭️ Pulando inventário - Personal Shopper = '{personal_shopper}' (tipo: {type(personal_shopper).__name__}) para cliente {context.user_data['relatorio']['cliente_nome']}")
+                                        logger.info(f"⏭️ [BOT] Pulando inventário - Personal Shopper = '{personal_shopper}' (tipo: {type(personal_shopper).__name__}) para cliente {context.user_data['relatorio']['cliente_nome']}")
                                         
                                         # Atualizar relatório no Notion para marcar como completo (sem inventário)
                                         # Isso será feito pelo n8n quando receber a FASE 1, mas vamos garantir aqui
@@ -2075,12 +2083,15 @@ class ChefBot:
                                                         # Verificar se precisa de inventário (Personal Shopper)
                                                         personal_shopper = context.user_data.get('personal_shopper', 'Não') or context.user_data['relatorio'].get('personal_shopper', 'Não')
                                                         
-                                                        # Log para debug: tipo e valor do personal_shopper
-                                                        logger.debug(f"🔍 Verificando inventário (retry) - Personal Shopper: valor='{personal_shopper}', tipo={type(personal_shopper).__name__}, precisa_inventario={self.precisa_inventario(personal_shopper)}")
+                                                        # Log detalhado: tipo e valor do personal_shopper (retry)
+                                                        logger.info(f"🔍 [BOT] Verificando inventário (retry) - Personal Shopper: valor='{personal_shopper}', tipo={type(personal_shopper).__name__}")
+                                                        logger.info(f"🔍 [BOT] context.user_data['personal_shopper'] = '{context.user_data.get('personal_shopper', 'NÃO ENCONTRADO')}'")
+                                                        logger.info(f"🔍 [BOT] context.user_data['relatorio']['personal_shopper'] = '{context.user_data['relatorio'].get('personal_shopper', 'NÃO ENCONTRADO')}'")
+                                                        logger.info(f"🔍 [BOT] precisa_inventario('{personal_shopper}') = {self.precisa_inventario(personal_shopper)}")
                                                         
                                                         # Se Personal Shopper indicar que NÃO precisa de inventário, pular e finalizar
                                                         if not self.precisa_inventario(personal_shopper):
-                                                            logger.info(f"⏭️ Pulando inventário - Personal Shopper = '{personal_shopper}' (tipo: {type(personal_shopper).__name__}) para cliente {context.user_data['relatorio']['cliente_nome']}")
+                                                            logger.info(f"⏭️ [BOT] Pulando inventário (retry) - Personal Shopper = '{personal_shopper}' (tipo: {type(personal_shopper).__name__}) para cliente {context.user_data['relatorio']['cliente_nome']}")
                                                             await update.message.reply_text(
                                                                 "✅ *Relatório finalizado!*\n\n"
                                                                 "Este atendimento não requer inventário.\n\n"
