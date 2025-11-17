@@ -11,7 +11,7 @@ from config import (
 )
 
 # Configurar logger no nível do módulo
-logger_notion = logging.getLogger(__name__)
+logger_notion = logging.getLogger('notion_api')
 
 
 class NotionAPI:
@@ -98,7 +98,9 @@ class NotionAPI:
         data_inicio = dias_atras.strftime("%Y-%m-%d")
         data_fim = (hoje + timedelta(days=1)).strftime("%Y-%m-%d")  # Amanhã (exclusivo)
         filtro_tipo = "sem relatório" if sem_relatorio else "todos"
-        logger_notion.info(f"🔍 Buscando atendimentos do chef {chef_id[:8]}... de {data_inicio} até {data_fim} (exclusivo) - {filtro_tipo}")
+        # Log explícito para garantir que aparece
+        print(f"[NOTION_API] 🔍 Buscando atendimentos do chef {chef_id[:8]}... de {data_inicio} até {data_fim} (exclusivo) - {filtro_tipo}")
+        logger_notion.info(f"🔍 [NOTION] Buscando atendimentos do chef {chef_id[:8]}... de {data_inicio} até {data_fim} (exclusivo) - {filtro_tipo}")
         
         # Construir filtros base
         filtros = [
@@ -209,6 +211,7 @@ class NotionAPI:
                     personal_shopper = None
                     
                     # Log para debug: ver o que está vindo do Notion
+                    print(f"[NOTION_API] 🔍 [NOTION] Personal Shopper prop para {cliente_nome}: tipo={personal_shopper_prop.get('type')}, valor_completo={personal_shopper_prop}")
                     logger_notion.info(f"🔍 [NOTION] Personal Shopper prop para {cliente_nome}: tipo={personal_shopper_prop.get('type')}, valor_completo={personal_shopper_prop}")
                     
                     # Verificar tipo da propriedade (pode ser select, checkbox, ou text)
@@ -238,10 +241,12 @@ class NotionAPI:
                     # Se personal_shopper for string vazia ou None, usar 'Não' como padrão
                     # Mas manter o valor original se for 'true', 'Sim', 'Misto', etc.
                     # IMPORTANTE: Se o valor for 'true', 'Sim', 'Misto', etc., deve ser mantido!
+                    print(f"[NOTION_API] 🔍 [NOTION] ANTES da conversão - personal_shopper: '{personal_shopper}' (tipo: {type(personal_shopper).__name__}, bool(personal_shopper)={bool(personal_shopper)})")
                     logger_notion.info(f"🔍 [NOTION] ANTES da conversão - personal_shopper: '{personal_shopper}' (tipo: {type(personal_shopper).__name__}, bool(personal_shopper)={bool(personal_shopper)})")
                     personal_shopper_final = personal_shopper if personal_shopper else 'Não'
                     
                     # Log final do valor que será usado
+                    print(f"[NOTION_API] 🔍 [NOTION] Personal Shopper final para {cliente_nome}: '{personal_shopper_final}' (original: '{personal_shopper}')")
                     logger_notion.info(f"🔍 [NOTION] Personal Shopper final para {cliente_nome}: '{personal_shopper_final}' (original: '{personal_shopper}')")
                     
                     # Adicionar atendimento (já filtrado pela API do Notion, mas vamos verificar novamente)
