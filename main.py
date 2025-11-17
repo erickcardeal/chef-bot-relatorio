@@ -1362,21 +1362,21 @@ class ChefBot:
                         else:
                             mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
                         
-                        await update.message.reply_text(
-                            mensagem_confirmacao +
-                            "📸 *Foto de SAÍDA*\n\n"
-                            "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
-                            "💡 Você pode enviar uma ou várias fotos.",
-                            parse_mode='Markdown'
-                        )
-                        album_data['message_sent'] = True
-                        logger.info(f"✅ Mensagem de confirmação enviada para álbum (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
-                    
-                    # Não limpar álbum do coletor aqui - deixar para o handler global bloquear outras fotos
-                    # O álbum será limpo automaticamente após um tempo ou quando não houver mais fotos
-                    
-                    # Mudar para estado FOTO_SAIDA
-                    return FOTO_SAIDA
+                            await update.message.reply_text(
+                                mensagem_confirmacao +
+                                "📸 *Foto de SAÍDA*\n\n"
+                                "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
+                                "💡 Você pode enviar uma ou várias fotos.",
+                                parse_mode='Markdown'
+                            )
+                            album_data['message_sent'] = True
+                            logger.info(f"✅ Mensagem de confirmação enviada para álbum (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
+                        
+                        # Não limpar álbum do coletor aqui - deixar para o handler global bloquear outras fotos
+                        # O álbum será limpo automaticamente após um tempo ou quando não houver mais fotos
+                        
+                        # Mudar para estado FOTO_SAIDA
+                        return FOTO_SAIDA
                 else:
                     # Álbum ainda está sendo processado - aguardar mais tempo
                     logger.info(f"⏳ Álbum ainda sendo processado... Aguardando fotos coletadas (media_group_id: {media_group_id})")
