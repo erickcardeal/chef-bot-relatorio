@@ -436,39 +436,70 @@ class ChefBot:
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Comando /relatorio - Iniciar conversa e identificar chef"""
-        user = update.effective_user
-        username = user.username
-        user_id = user.id
-        chat_id = update.effective_chat.id
-        
-        # Limpar flag de timeout encerrado (usuário está reiniciando)
-        self.limpar_timeout_encerrado(user_id)
-        
-        # Limpar dados anteriores se houver
-        context.user_data.clear()
-        
-        # Atualizar atividade e agendar verificação de timeout
-        self.atualizar_atividade_usuario(user_id)
-        if context.job_queue:
-            self.agendar_verificacao_timeout(user_id, chat_id, context.job_queue)
-        
-        logger.info(f"🔵 Chef iniciou conversa: @{username} (ID: {user_id})")
-        
-        # Buscar chef no Notion pelo username (sem @)
-        logger.info(f"🔄 Buscando chef no Notion para @{username}...")
         try:
-            chef_data = await self.notion.buscar_chef_por_telegram(username)
-            logger.info(f"✅ Chef encontrado: {chef_data.get('nome', 'N/A') if chef_data else 'None'}")
+            user = update.effective_user
+            username = user.username
+            user_id = user.id
+            chat_id = update.effective_chat.id
+            
+            logger.info(f"🔄 Comando /relatorio recebido de @{username} (ID: {user_id})")
+            
+            # Limpar flag de timeout encerrado (usuário está reiniciando)
+            self.limpar_timeout_encerrado(user_id)
+            
+            # Limpar TODOS os dados anteriores (forçar reinício completo)
+            context.user_data.clear()
+            
+            # Limpar atividade anterior do usuário
+            if user_id in user_activity:
+                # Cancelar jobs de timeout pendentes
+                if 'timeout_warning_job' in user_activity[user_id]:
+                    try:
+                        if user_activity[user_id]['timeout_warning_job']:
+                            user_activity[user_id]['timeout_warning_job'].schedule_removal()
+                    except:
+                        pass
+                if 'timeout_end_job' in user_activity[user_id]:
+                    try:
+                        if user_activity[user_id]['timeout_end_job']:
+                            user_activity[user_id]['timeout_end_job'].schedule_removal()
+                    except:
+                        pass
+                # Limpar entrada de atividade
+                del user_activity[user_id]
+                logger.info(f"🧹 Dados anteriores limpos para usuário {user_id}")
+            
+            # Atualizar atividade e agendar verificação de timeout
+            self.atualizar_atividade_usuario(user_id)
+            if context.job_queue:
+                self.agendar_verificacao_timeout(user_id, chat_id, context.job_queue)
+            
+            logger.info(f"🔵 Chef iniciou conversa: @{username} (ID: {user_id})")
+            
+            # Buscar chef no Notion pelo username (sem @)
+            logger.info(f"🔄 Buscando chef no Notion para @{username}...")
+            try:
+                chef_data = await self.notion.buscar_chef_por_telegram(username)
+                logger.info(f"✅ Chef encontrado: {chef_data.get('nome', 'N/A') if chef_data else 'None'}")
+            except Exception as e:
+                logger.error(f"❌ Erro ao buscar chef: {e}", exc_info=True)
+                chef_data = None
+            
+            if not chef_data:
+                logger.info(f"⚠️ Chef não encontrado para @{username}")
+                await update.message.reply_text(
+                    "❌ Chef não encontrado no sistema.\n\n"
+                    "Por favor, entre em contato com o time de tecnologia para resolver este problema."
+                )
+                return ConversationHandler.END
         except Exception as e:
-            logger.error(f"❌ Erro ao buscar chef: {e}", exc_info=True)
-            chef_data = None
-        
-        if not chef_data:
-            logger.info(f"⚠️ Chef não encontrado para @{username}")
-            await update.message.reply_text(
-                "❌ Chef não encontrado no sistema.\n\n"
-                "Por favor, entre em contato com o time de tecnologia para resolver este problema."
-            )
+            logger.error(f"❌ Erro crítico no start: {e}", exc_info=True)
+            try:
+                await update.message.reply_text(
+                    "❌ Ocorreu um erro ao iniciar a conversa. Por favor, tente novamente com /relatorio"
+                )
+            except:
+                pass
             return ConversationHandler.END
         
         # Salvar dados do chef no contexto
