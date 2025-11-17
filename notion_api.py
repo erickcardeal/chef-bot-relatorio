@@ -150,6 +150,12 @@ class NotionAPI:
             "page_size": 100  # Limite máximo do Notion
         }
         
+        # Log do payload para debug
+        import json
+        payload_log = json.dumps(payload, indent=2, ensure_ascii=False)
+        print(f"[NOTION_API] 📤 Payload enviado para Notion:\n{payload_log}")
+        logger_notion.info(f"📤 Payload enviado para Notion: {payload_log}")
+        
         try:
             atendimentos = []
             has_more = True
@@ -167,6 +173,19 @@ class NotionAPI:
                 # Processar resultados da página atual
                 resultados_pagina = data.get('results', [])
                 logger_notion.info(f"📄 Página atual: {len(resultados_pagina)} resultados")
+                
+                # Verificar status dos atendimentos retornados (para debug do filtro)
+                if resultados_pagina:
+                    status_list = []
+                    for item in resultados_pagina:
+                        status_prop = item.get('properties', {}).get('Status', {})
+                        status_value = status_prop.get('select', {}).get('name', 'N/A') if status_prop.get('type') == 'select' else 'N/A'
+                        status_list.append(status_value)
+                    status_count = {}
+                    for s in status_list:
+                        status_count[s] = status_count.get(s, 0) + 1
+                    print(f"[NOTION_API] 📊 Status dos atendimentos retornados: {status_count}")
+                    logger_notion.info(f"📊 Status dos atendimentos retornados: {status_count}")
                 
                 # Contadores para debug
                 total_resultados = len(resultados_pagina)
