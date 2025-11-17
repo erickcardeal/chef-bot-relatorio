@@ -1356,8 +1356,8 @@ class ChefBot:
                         
                         # Enviar mensagem de confirmação e pedir foto de saída (apenas uma vez)
                         if not album_data.get('message_sent', False):
-                        # Mensagem dinâmica baseada na quantidade de fotos
-                        if qtd_fotos == 1:
+                            # Mensagem dinâmica baseada na quantidade de fotos
+                            if qtd_fotos == 1:
                             mensagem_confirmacao = "✅ 1 foto de entrada recebida!\n\n"
                         else:
                             mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
@@ -1572,12 +1572,12 @@ class ChefBot:
                         
                         # Processar e mostrar resumo (apenas uma vez)
                         if not album_data.get('message_sent', False):
-                        await self.mostrar_resumo_fase1(update, context)
-                        album_data['message_sent'] = True
-                        return RESUMO_FASE1
-                    else:
-                        # Mensagem já foi enviada, apenas retornar estado
-                        return RESUMO_FASE1
+                            await self.mostrar_resumo_fase1(update, context)
+                            album_data['message_sent'] = True
+                            return RESUMO_FASE1
+                        else:
+                            # Mensagem já foi enviada, apenas retornar estado
+                            return RESUMO_FASE1
                 else:
                     # Álbum ainda está sendo processado - aguardar mais tempo
                     logger.info(f"⏳ Álbum ainda sendo processado... Aguardando fotos coletadas (media_group_id: {media_group_id})")
