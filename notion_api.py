@@ -156,6 +156,16 @@ class NotionAPI:
         print(f"[NOTION_API] 📤 Payload enviado para Notion:\n{payload_log}")
         logger_notion.info(f"📤 Payload enviado para Notion: {payload_log}")
         
+        # Log específico do filtro Chef Alocado
+        chef_filter = next((f for f in filtros if f.get("property") == "Chef Alocado"), None)
+        if chef_filter:
+            chef_id_filtrado = chef_filter.get("relation", {}).get("contains", "N/A")
+            print(f"[NOTION_API] 🔍 Filtro 'Chef Alocado' aplicado: chef_id={chef_id_filtrado}")
+            logger_notion.info(f"🔍 Filtro 'Chef Alocado' aplicado: chef_id={chef_id_filtrado}")
+        else:
+            print(f"[NOTION_API] ⚠️ Filtro 'Chef Alocado' NÃO encontrado nos filtros!")
+            logger_notion.warning(f"⚠️ Filtro 'Chef Alocado' NÃO encontrado nos filtros!")
+        
         try:
             atendimentos = []
             has_more = True

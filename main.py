@@ -1008,7 +1008,7 @@ class ChefBot:
                         reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
                         
                         await update.message.reply_text(
-                            "*Confirma que está correto?*",
+                            "Confirma que está correto?",
                             parse_mode='Markdown',
                             reply_markup=reply_markup
                         )
@@ -1767,7 +1767,7 @@ class ChefBot:
                     # Personal Shopper (para determinar se precisa de inventário)
                     # IMPORTANTE: O n8n deve usar este campo para definir o status no Notion:
                     # - Se personal_shopper = "Não" (ou variações): Status = "Processar" (não precisa de inventário)
-                    # - Se personal_shopper != "Não": Status = "Criado - Aguardando Inventário" (precisa de inventário)
+                    # - Se personal_shopper != "Não": Status = "Processar" (precisa de inventário - será processado após inventário)
                     "personal_shopper": context.user_data.get('personal_shopper', 'Não') or context.user_data['relatorio'].get('personal_shopper', 'Não')
                 }
             }
