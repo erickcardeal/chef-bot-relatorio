@@ -348,19 +348,23 @@ class ChefBot:
     def precisa_inventario(self, personal_shopper) -> bool:
         """Verificar se precisa de inventário baseado no personal_shopper
         
+        Regra: APENAS "Não" (e variações) NÃO precisa de inventário.
+        Todas as outras opções ("true", "Sim", "Misto", etc.) PRECISAM de inventário.
+        
         Retorna True se PRECISA de inventário, False se NÃO precisa.
         
-        Valores que NÃO precisam de inventário:
+        Valores que NÃO precisam de inventário (APENAS ESTES):
         - "Não", "não", "NAO", "nao", "No", "no", "N", "n"
         - False, "False", "false"
         - "0", 0
-        - String vazia, None
         
-        Valores que PRECISAM de inventário:
-        - "Sim", "sim", "SIM", "True", "true", True
-        - Qualquer outro valor
+        Valores que PRECISAM de inventário (TODOS OS OUTROS):
+        - "true", "True", True (booleano)
+        - "Sim", "sim", "SIM"
+        - "Misto", "misto", "MISTO"
+        - Qualquer outro valor (por padrão, assume que precisa)
         """
-        # Se for None ou vazio, por padrão precisa de inventário
+        # Se for None, por padrão precisa de inventário
         if personal_shopper is None:
             return True
         
@@ -381,22 +385,15 @@ class ChefBot:
         # Remover acentos (caso comum: "não" vs "nao")
         valor_normalizado = valor_normalizado.replace('ã', 'a').replace('õ', 'o')
         
-        # Valores que indicam que NÃO precisa de inventário
-        valores_sem_inventario = ['não', 'nao', 'no', 'n', 'false', '0', '']
-        
-        # Valores que indicam que PRECISA de inventário (explícitos)
-        valores_com_inventario = ['sim', 'true', '1', 'yes', 's', 'y']
+        # APENAS estes valores indicam que NÃO precisa de inventário
+        valores_sem_inventario = ['não', 'nao', 'no', 'n', 'false', '0']
         
         # Se está na lista de valores sem inventário, retorna False (não precisa)
         if valor_normalizado in valores_sem_inventario:
             return False
         
-        # Se está na lista de valores com inventário, retorna True (precisa)
-        if valor_normalizado in valores_com_inventario:
-            return True
-        
-        # Por padrão, se não está em nenhuma lista, assume que precisa de inventário
-        # (mais seguro - melhor pedir inventário do que não pedir)
+        # TODOS os outros valores precisam de inventário
+        # Isso inclui: "true", "sim", "misto", e qualquer outro valor
         return True
     
     def format_date(self, date_str: str) -> str:
