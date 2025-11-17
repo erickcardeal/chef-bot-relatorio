@@ -345,13 +345,38 @@ class ChefBot:
         self.agendar_verificacao_timeout(user_id, chat_id, job_queue)
         logger.debug(f"⏱️ Timeout reagendado após mensagem para user {user_id}")
     
-    def precisa_inventario(self, personal_shopper: str) -> bool:
-        """Verificar se precisa de inventário baseado no personal_shopper"""
-        if not personal_shopper:
-            return True  # Por padrão, precisa de inventário se não especificado
+    def precisa_inventario(self, personal_shopper) -> bool:
+        """Verificar se precisa de inventário baseado no personal_shopper
         
-        # Normalizar: remover espaços, converter para minúsculas e remover acentos
-        valor_normalizado = personal_shopper.strip().lower()
+        Retorna True se PRECISA de inventário, False se NÃO precisa.
+        
+        Valores que NÃO precisam de inventário:
+        - "Não", "não", "NAO", "nao", "No", "no", "N", "n"
+        - False, "False", "false"
+        - "0", 0
+        - String vazia, None
+        
+        Valores que PRECISAM de inventário:
+        - "Sim", "sim", "SIM", "True", "true", True
+        - Qualquer outro valor
+        """
+        # Se for None ou vazio, por padrão precisa de inventário
+        if personal_shopper is None:
+            return True
+        
+        # Se for booleano, tratar diretamente
+        if isinstance(personal_shopper, bool):
+            return personal_shopper  # True = precisa, False = não precisa
+        
+        # Converter para string e normalizar
+        valor_str = str(personal_shopper).strip()
+        
+        # Se string vazia, por padrão precisa de inventário
+        if not valor_str:
+            return True
+        
+        # Normalizar: converter para minúsculas e remover acentos
+        valor_normalizado = valor_str.lower()
         
         # Remover acentos (caso comum: "não" vs "nao")
         valor_normalizado = valor_normalizado.replace('ã', 'a').replace('õ', 'o')
@@ -359,8 +384,20 @@ class ChefBot:
         # Valores que indicam que NÃO precisa de inventário
         valores_sem_inventario = ['não', 'nao', 'no', 'n', 'false', '0', '']
         
-        # Se o valor normalizado está na lista, NÃO precisa de inventário
-        return valor_normalizado not in valores_sem_inventario
+        # Valores que indicam que PRECISA de inventário (explícitos)
+        valores_com_inventario = ['sim', 'true', '1', 'yes', 's', 'y']
+        
+        # Se está na lista de valores sem inventário, retorna False (não precisa)
+        if valor_normalizado in valores_sem_inventario:
+            return False
+        
+        # Se está na lista de valores com inventário, retorna True (precisa)
+        if valor_normalizado in valores_com_inventario:
+            return True
+        
+        # Por padrão, se não está em nenhuma lista, assume que precisa de inventário
+        # (mais seguro - melhor pedir inventário do que não pedir)
+        return True
     
     def format_date(self, date_str: str) -> str:
         """Formatar data para exibição"""
@@ -549,7 +586,11 @@ class ChefBot:
         context.user_data['cliente_id'] = atendimento.get('cliente_id', '')
         context.user_data['atendimento_id'] = atendimento.get('id', '')
         context.user_data['data_atendimento'] = atendimento.get('data', datetime.now(BR_TZ).strftime("%Y-%m-%d"))
-        context.user_data['personal_shopper'] = atendimento.get('personal_shopper', 'Não')
+        
+        # Obter personal_shopper do atendimento e logar tipo e valor
+        personal_shopper_raw = atendimento.get('personal_shopper', 'Não')
+        context.user_data['personal_shopper'] = personal_shopper_raw
+        logger.debug(f"🔍 Personal Shopper obtido do atendimento: valor='{personal_shopper_raw}', tipo={type(personal_shopper_raw).__name__}")
         
         # Inicializar estrutura de dados do relatório
         context.user_data['relatorio'] = {
@@ -560,10 +601,10 @@ class ChefBot:
             'atendimento_id': atendimento.get('id', ''),
             'data_atendimento': atendimento.get('data', datetime.now(BR_TZ).strftime("%Y-%m-%d")),
             'timestamp_inicio': datetime.now(BR_TZ).isoformat(),
-            'personal_shopper': atendimento.get('personal_shopper', 'Não')
+            'personal_shopper': personal_shopper_raw
         }
         
-        logger.info(f"📋 Atendimento selecionado: {cliente_nome} - Personal Shopper: {atendimento.get('personal_shopper', 'Não')}")
+        logger.info(f"📋 Atendimento selecionado: {cliente_nome} - Personal Shopper: {personal_shopper_raw} (tipo: {type(personal_shopper_raw).__name__})")
         
         await update.message.reply_text(
             "Qual foi o horário de chegada?",
@@ -1941,9 +1982,12 @@ class ChefBot:
                                     # Verificar se precisa de inventário (Personal Shopper)
                                     personal_shopper = context.user_data.get('personal_shopper', 'Não') or context.user_data['relatorio'].get('personal_shopper', 'Não')
                                     
+                                    # Log para debug: tipo e valor do personal_shopper
+                                    logger.debug(f"🔍 Verificando inventário - Personal Shopper: valor='{personal_shopper}', tipo={type(personal_shopper).__name__}, precisa_inventario={self.precisa_inventario(personal_shopper)}")
+                                    
                                     # Se Personal Shopper indicar que NÃO precisa de inventário, pular e finalizar
                                     if not self.precisa_inventario(personal_shopper):
-                                        logger.info(f"⏭️ Pulando inventário - Personal Shopper = '{personal_shopper}' para cliente {context.user_data['relatorio']['cliente_nome']}")
+                                        logger.info(f"⏭️ Pulando inventário - Personal Shopper = '{personal_shopper}' (tipo: {type(personal_shopper).__name__}) para cliente {context.user_data['relatorio']['cliente_nome']}")
                                         
                                         # Atualizar relatório no Notion para marcar como completo (sem inventário)
                                         # Isso será feito pelo n8n quando receber a FASE 1, mas vamos garantir aqui
@@ -2034,9 +2078,12 @@ class ChefBot:
                                                         # Verificar se precisa de inventário (Personal Shopper)
                                                         personal_shopper = context.user_data.get('personal_shopper', 'Não') or context.user_data['relatorio'].get('personal_shopper', 'Não')
                                                         
+                                                        # Log para debug: tipo e valor do personal_shopper
+                                                        logger.debug(f"🔍 Verificando inventário (retry) - Personal Shopper: valor='{personal_shopper}', tipo={type(personal_shopper).__name__}, precisa_inventario={self.precisa_inventario(personal_shopper)}")
+                                                        
                                                         # Se Personal Shopper indicar que NÃO precisa de inventário, pular e finalizar
                                                         if not self.precisa_inventario(personal_shopper):
-                                                            logger.info(f"⏭️ Pulando inventário - Personal Shopper = '{personal_shopper}' para cliente {context.user_data['relatorio']['cliente_nome']}")
+                                                            logger.info(f"⏭️ Pulando inventário - Personal Shopper = '{personal_shopper}' (tipo: {type(personal_shopper).__name__}) para cliente {context.user_data['relatorio']['cliente_nome']}")
                                                             await update.message.reply_text(
                                                                 "✅ *Relatório finalizado!*\n\n"
                                                                 "Este atendimento não requer inventário.\n\n"
