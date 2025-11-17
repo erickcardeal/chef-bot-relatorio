@@ -83,6 +83,9 @@ logger.info(f"📁 Arquivos Python no diretório: {[f for f in os.listdir('.') i
 # Estrutura: {user_id: {media_group_id: {'updates': [Update, ...], 'processed': bool, 'task': Task}}}
 album_collector: Dict[int, Dict[str, Dict[str, Any]]] = {}
 
+# Limite máximo de fotos por álbum (para evitar problemas de processamento)
+MAX_FOTOS_POR_ALBUM = 5
+
 # Dicionário global para rastrear última atividade do usuário e jobs de timeout
 # Estrutura: {user_id: {'last_activity': datetime, 'timeout_warning_job': Job, 'timeout_end_job': Job}}
 user_activity: Dict[int, Dict[str, Any]] = {}
@@ -1825,6 +1828,7 @@ class ChefBot:
             }
             logger.info(f"📦 Payload: {json.dumps(payload_log, indent=2)}")
             logger.info(f"📸 Fotos: {payload['body'].get('qtd_fotos_entrada', 0)} entrada, {payload['body'].get('qtd_fotos_saida', 0)} saída")
+            logger.info(f"📊 Debug fotos no payload: fotos_entrada_base64={len(payload['body'].get('fotos_entrada_base64', []))} itens, fotos_saida_base64={len(payload['body'].get('fotos_saida_base64', []))} itens")
             
             # Variáveis para controle de mensagens de aguarde
             mensagem_aguarde_enviada_1 = False
@@ -2529,6 +2533,22 @@ def main():
             # Processar todas as fotos do álbum
             updates_album = album_data['updates']
             qtd_fotos = len(updates_album)
+            
+            # Verificar limite de fotos
+            if qtd_fotos > MAX_FOTOS_POR_ALBUM:
+                logger.warning(f"⚠️ Álbum com {qtd_fotos} fotos excede o limite de {MAX_FOTOS_POR_ALBUM}. Processando apenas as primeiras {MAX_FOTOS_POR_ALBUM}.")
+                # Enviar mensagem de aviso ao usuário (se possível)
+                try:
+                    if updates_album and updates_album[0].message:
+                        await updates_album[0].message.reply_text(
+                            f"⚠️ Você enviou {qtd_fotos} fotos, mas o limite é {MAX_FOTOS_POR_ALBUM}.\n"
+                            f"Vou processar apenas as primeiras {MAX_FOTOS_POR_ALBUM} fotos."
+                        )
+                except:
+                    pass
+                updates_album = updates_album[:MAX_FOTOS_POR_ALBUM]
+                qtd_fotos = MAX_FOTOS_POR_ALBUM
+            
             logger.info(f"📸 Processando álbum completo: {qtd_fotos} foto(s) coletada(s) (media_group_id: {media_group_id})")
             
             # Marcar como processado
@@ -2536,7 +2556,7 @@ def main():
             
             # Processar todas as fotos (baixar e converter para base64)
             fotos_processadas = []
-            for update_photo in updates_album:
+            for idx, update_photo in enumerate(updates_album, 1):
                 if update_photo.message and update_photo.message.photo:
                     try:
                         # Baixar foto (maior resolução)
@@ -2552,8 +2572,9 @@ def main():
                             'base64': photo_base64,
                             'message_id': update_photo.message.message_id
                         })
+                        logger.debug(f"✅ Foto {idx}/{qtd_fotos} processada (message_id: {update_photo.message.message_id})")
                     except Exception as e:
-                        logger.error(f"❌ Erro ao processar foto (message_id: {update_photo.message.message_id}): {e}")
+                        logger.error(f"❌ Erro ao processar foto {idx}/{qtd_fotos} (message_id: {update_photo.message.message_id}): {e}")
             
             logger.info(f"✅ {len(fotos_processadas)} foto(s) processada(s) do álbum (media_group_id: {media_group_id})")
             
