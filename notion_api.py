@@ -214,28 +214,58 @@ class NotionAPI:
                     print(f"[NOTION_API] 🔍 [NOTION] Personal Shopper prop para {cliente_nome}: tipo={personal_shopper_prop.get('type')}, valor_completo={personal_shopper_prop}")
                     logger_notion.info(f"🔍 [NOTION] Personal Shopper prop para {cliente_nome}: tipo={personal_shopper_prop.get('type')}, valor_completo={personal_shopper_prop}")
                     
-                    # Verificar tipo da propriedade (pode ser select, checkbox, ou text)
+                    # Verificar tipo da propriedade (pode ser select, checkbox, rich_text, ou rollup)
                     if personal_shopper_prop.get('type') == 'select':
                         select_value = personal_shopper_prop.get('select')
                         if select_value is None:
                             personal_shopper = ''
+                            print(f"[NOTION_API] ⚠️ [NOTION] Personal Shopper select é None para {cliente_nome}")
                             logger_notion.info(f"⚠️ [NOTION] Personal Shopper select é None para {cliente_nome}")
                         else:
                             personal_shopper = select_value.get('name', '')
+                            print(f"[NOTION_API] ✅ [NOTION] Personal Shopper select extraído: '{personal_shopper}' para {cliente_nome} (select_value={select_value})")
                             logger_notion.info(f"✅ [NOTION] Personal Shopper select extraído: '{personal_shopper}' para {cliente_nome} (select_value={select_value})")
+                    elif personal_shopper_prop.get('type') == 'rollup':
+                        # Rollup: valor está em rollup.array[0].select.name
+                        rollup_data = personal_shopper_prop.get('rollup', {})
+                        rollup_array = rollup_data.get('array', [])
+                        if rollup_array and len(rollup_array) > 0:
+                            first_item = rollup_array[0]
+                            if first_item.get('type') == 'select':
+                                select_value = first_item.get('select')
+                                if select_value:
+                                    personal_shopper = select_value.get('name', '')
+                                    print(f"[NOTION_API] ✅ [NOTION] Personal Shopper rollup extraído: '{personal_shopper}' para {cliente_nome} (rollup_array[0]={first_item})")
+                                    logger_notion.info(f"✅ [NOTION] Personal Shopper rollup extraído: '{personal_shopper}' para {cliente_nome} (rollup_array[0]={first_item})")
+                                else:
+                                    personal_shopper = ''
+                                    print(f"[NOTION_API] ⚠️ [NOTION] Personal Shopper rollup select é None para {cliente_nome}")
+                                    logger_notion.info(f"⚠️ [NOTION] Personal Shopper rollup select é None para {cliente_nome}")
+                            else:
+                                personal_shopper = ''
+                                print(f"[NOTION_API] ⚠️ [NOTION] Personal Shopper rollup array[0] não é select: {first_item.get('type')} para {cliente_nome}")
+                                logger_notion.info(f"⚠️ [NOTION] Personal Shopper rollup array[0] não é select: {first_item.get('type')} para {cliente_nome}")
+                        else:
+                            personal_shopper = ''
+                            print(f"[NOTION_API] ⚠️ [NOTION] Personal Shopper rollup array vazio para {cliente_nome}")
+                            logger_notion.info(f"⚠️ [NOTION] Personal Shopper rollup array vazio para {cliente_nome}")
                     elif personal_shopper_prop.get('type') == 'checkbox':
                         checkbox_value = personal_shopper_prop.get('checkbox', False)
                         personal_shopper = 'Sim' if checkbox_value else 'Não'
+                        print(f"[NOTION_API] ✅ [NOTION] Personal Shopper checkbox: '{personal_shopper}' para {cliente_nome} (checkbox_value={checkbox_value})")
                         logger_notion.info(f"✅ [NOTION] Personal Shopper checkbox: '{personal_shopper}' para {cliente_nome} (checkbox_value={checkbox_value})")
                     elif personal_shopper_prop.get('type') == 'rich_text':
                         rich_text = personal_shopper_prop.get('rich_text', [])
                         if rich_text and len(rich_text) > 0:
                             personal_shopper = rich_text[0].get('text', {}).get('content', '')
+                            print(f"[NOTION_API] ✅ [NOTION] Personal Shopper rich_text: '{personal_shopper}' para {cliente_nome}")
                             logger_notion.info(f"✅ [NOTION] Personal Shopper rich_text: '{personal_shopper}' para {cliente_nome}")
                         else:
                             personal_shopper = ''
+                            print(f"[NOTION_API] ⚠️ [NOTION] Personal Shopper rich_text vazio para {cliente_nome}")
                             logger_notion.info(f"⚠️ [NOTION] Personal Shopper rich_text vazio para {cliente_nome}")
                     else:
+                        print(f"[NOTION_API] ⚠️ [NOTION] Personal Shopper tipo desconhecido: {personal_shopper_prop.get('type')} para {cliente_nome}")
                         logger_notion.warning(f"⚠️ [NOTION] Personal Shopper tipo desconhecido: {personal_shopper_prop.get('type')} para {cliente_nome}")
                     
                     # Se personal_shopper for string vazia ou None, usar 'Não' como padrão
