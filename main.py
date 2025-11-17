@@ -1332,11 +1332,26 @@ class ChefBot:
                     fotos_processadas = album_data['fotos_processadas']
                     qtd_fotos = len(fotos_processadas)
                     
-                    logger.info(f"✅ Álbum já processado! Usando {qtd_fotos} foto(s) coletada(s) (media_group_id: {media_group_id})")
+                    # Verificar se há fotos processadas (pode estar vazio durante reprocessamento)
+                    if qtd_fotos == 0:
+                        logger.warning(f"⚠️ Álbum processado mas sem fotos (pode estar reprocessando). Aguardando...")
+                        # Aguardar mais um pouco para o reprocessamento terminar
+                        await asyncio.sleep(2)
+                        # Verificar novamente
+                        if user_id in album_collector and media_group_id in album_collector[user_id]:
+                            album_data = album_collector[user_id][media_group_id]
+                            fotos_processadas = album_data.get('fotos_processadas', [])
+                            qtd_fotos = len(fotos_processadas)
                     
-                    # Atualizar relatório com todas as fotos
-                    context.user_data['relatorio']['fotos_entrada'] = fotos_processadas
-                    context.user_data['relatorio']['foto_entrada'] = fotos_processadas[0]['base64']
+                    if qtd_fotos == 0:
+                        logger.error(f"❌ Álbum processado mas sem fotos após espera. Processando como foto única.")
+                        is_album = False  # Forçar processamento como foto única
+                    else:
+                        logger.info(f"✅ Álbum já processado! Usando {qtd_fotos} foto(s) coletada(s) (media_group_id: {media_group_id})")
+                        
+                        # Atualizar relatório com todas as fotos
+                        context.user_data['relatorio']['fotos_entrada'] = fotos_processadas
+                        context.user_data['relatorio']['foto_entrada'] = fotos_processadas[0]['base64']
                     
                     # Enviar mensagem de confirmação e pedir foto de saída (apenas uma vez)
                     if not album_data.get('message_sent', False):
@@ -1431,6 +1446,11 @@ class ChefBot:
                             # Agora foi processado - usar fotos coletadas
                             fotos_processadas = album_data['fotos_processadas']
                             qtd_fotos = len(fotos_processadas)
+                            
+                            # Verificar se há fotos processadas
+                            if qtd_fotos == 0:
+                                logger.warning(f"⚠️ Álbum processado mas sem fotos após espera ({tempo_espera_total:.1f}s). Continuando aguardando...")
+                                continue  # Continuar aguardando
                             
                             logger.info(f"✅ Álbum processado após espera ({tempo_espera_total:.1f}s)! Usando {qtd_fotos} foto(s) coletada(s)")
                             
@@ -1527,11 +1547,26 @@ class ChefBot:
                     fotos_processadas = album_data['fotos_processadas']
                     qtd_fotos = len(fotos_processadas)
                     
-                    logger.info(f"✅ Álbum já processado! Usando {qtd_fotos} foto(s) coletada(s) (media_group_id: {media_group_id})")
+                    # Verificar se há fotos processadas (pode estar vazio durante reprocessamento)
+                    if qtd_fotos == 0:
+                        logger.warning(f"⚠️ Álbum processado mas sem fotos (pode estar reprocessando). Aguardando...")
+                        # Aguardar mais um pouco para o reprocessamento terminar
+                        await asyncio.sleep(2)
+                        # Verificar novamente
+                        if user_id in album_collector and media_group_id in album_collector[user_id]:
+                            album_data = album_collector[user_id][media_group_id]
+                            fotos_processadas = album_data.get('fotos_processadas', [])
+                            qtd_fotos = len(fotos_processadas)
                     
-                    # Atualizar relatório com todas as fotos
-                    context.user_data['relatorio']['fotos_saida'] = fotos_processadas
-                    context.user_data['relatorio']['foto_saida'] = fotos_processadas[0]['base64']
+                    if qtd_fotos == 0:
+                        logger.error(f"❌ Álbum processado mas sem fotos após espera. Processando como foto única.")
+                        is_album = False  # Forçar processamento como foto única
+                    else:
+                        logger.info(f"✅ Álbum já processado! Usando {qtd_fotos} foto(s) coletada(s) (media_group_id: {media_group_id})")
+                        
+                        # Atualizar relatório com todas as fotos
+                        context.user_data['relatorio']['fotos_saida'] = fotos_processadas
+                        context.user_data['relatorio']['foto_saida'] = fotos_processadas[0]['base64']
                     
                     # Processar e mostrar resumo (apenas uma vez)
                     if not album_data.get('message_sent', False):
@@ -1560,6 +1595,11 @@ class ChefBot:
                                 # Agora foi processado - usar fotos coletadas
                                 fotos_processadas = album_data['fotos_processadas']
                                 qtd_fotos = len(fotos_processadas)
+                                
+                                # Verificar se há fotos processadas
+                                if qtd_fotos == 0:
+                                    logger.warning(f"⚠️ Álbum processado mas sem fotos após espera ({tempo_espera_total:.1f}s). Continuando aguardando...")
+                                    continue  # Continuar aguardando
                                 
                                 logger.info(f"✅ Álbum processado após espera ({tempo_espera_total:.1f}s)! Usando {qtd_fotos} foto(s) coletada(s)")
                                 
