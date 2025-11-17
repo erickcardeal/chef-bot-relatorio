@@ -2478,17 +2478,89 @@ def main():
         # Obter dados do álbum
         album_data = album_collector[user_id][media_group_id]
         
-        # Verificar se já foi processado - se sim, bloquear para não passar para o ConversationHandler
-        # Mas permitir que a primeira foto do álbum processado seja passada para o ConversationHandler
-        # para usar as fotos coletadas
+        # Verificar se já foi processado - se sim, verificar se precisa reprocessar
         if album_data['processed']:
             # Se o álbum já foi processado e já enviamos mensagem, bloquear fotos adicionais
             if album_data.get('message_sent', False):
                 logger.info(f"📸 Álbum já foi processado e mensagem enviada. Bloqueando foto (message_id: {message_id})")
                 raise ApplicationHandlerStop
-            # Se o álbum foi processado mas ainda não enviamos mensagem, permitir que a primeira foto seja processada
-            logger.info(f"📸 Álbum já foi processado. Permitindo primeira foto para usar fotos coletadas (message_id: {message_id})")
-            # Não bloquear - deixar passar para o ConversationHandler processar
+            
+            # Se o álbum foi processado mas ainda não enviamos mensagem, e uma nova foto chegou,
+            # REPROCESSAR o álbum com todas as fotos (incluindo as novas)
+            logger.info(f"📸 Álbum já foi processado mas nova foto chegou. Reprocessando álbum (message_id: {message_id})")
+            # Adicionar a nova foto à lista primeiro
+            if message_id not in [u.message.message_id for u in album_data['updates'] if u.message]:
+                album_data['updates'].append(update)
+                album_data['last_update_time'] = asyncio.get_event_loop().time()
+                logger.info(f"✅ Nova foto adicionada ao álbum (total: {len(album_data['updates'])}, media_group_id: {media_group_id})")
+            
+            # Reprocessar o álbum com todas as fotos (incluindo as novas)
+            album_data['processed'] = False  # Resetar flag para reprocessar
+            album_data['fotos_processadas'] = []  # Limpar fotos processadas anteriores
+            
+            # Criar task para reprocessar após aguardar mais fotos
+            async def reprocessar_album():
+                await asyncio.sleep(2)  # Aguardar 2 segundos para ver se chegam mais fotos
+                
+                if user_id not in album_collector or media_group_id not in album_collector[user_id]:
+                    return
+                
+                album_data_reproc = album_collector[user_id][media_group_id]
+                
+                if album_data_reproc.get('message_sent', False):
+                    return  # Mensagem já foi enviada, não reprocessar
+                
+                # Verificar se ainda não recebemos mais fotos recentemente
+                tempo_decorrido = asyncio.get_event_loop().time() - album_data_reproc['last_update_time']
+                if tempo_decorrido < 1.5:
+                    logger.info(f"⏳ Ainda recebendo fotos ({tempo_decorrido:.1f}s atrás), aguardando mais...")
+                    return
+                
+                # Reprocessar todas as fotos
+                updates_album_reproc = album_data_reproc['updates']
+                qtd_fotos_reproc = len(updates_album_reproc)
+                
+                if qtd_fotos_reproc > MAX_FOTOS_POR_ALBUM:
+                    updates_album_reproc = updates_album_reproc[:MAX_FOTOS_POR_ALBUM]
+                    qtd_fotos_reproc = MAX_FOTOS_POR_ALBUM
+                
+                logger.info(f"🔄 Reprocessando álbum: {qtd_fotos_reproc} foto(s) (media_group_id: {media_group_id})")
+                
+                album_data_reproc['processed'] = True
+                
+                # Processar todas as fotos
+                fotos_processadas_reproc = []
+                for idx, update_photo in enumerate(updates_album_reproc, 1):
+                    if update_photo.message and update_photo.message.photo:
+                        try:
+                            photo_file = await update_photo.message.photo[-1].get_file()
+                            photo_bytes = BytesIO()
+                            await photo_file.download_to_memory(photo_bytes)
+                            photo_bytes.seek(0)
+                            photo_base64 = base64.b64encode(photo_bytes.read()).decode('utf-8')
+                            
+                            fotos_processadas_reproc.append({
+                                'file_unique_id': update_photo.message.photo[-1].file_unique_id,
+                                'base64': photo_base64,
+                                'message_id': update_photo.message.message_id
+                            })
+                        except Exception as e:
+                            logger.error(f"❌ Erro ao reprocessar foto {idx}/{qtd_fotos_reproc}: {e}")
+                
+                album_data_reproc['fotos_processadas'] = fotos_processadas_reproc
+                album_data_reproc['qtd_fotos'] = len(fotos_processadas_reproc)
+                logger.info(f"✅ Álbum reprocessado: {len(fotos_processadas_reproc)} foto(s) (media_group_id: {media_group_id})")
+            
+            # Cancelar task anterior se existir
+            if album_data['task'] and not album_data['task'].done():
+                album_data['task'].cancel()
+            
+            # Criar nova task para reprocessar
+            task_reproc = asyncio.create_task(reprocessar_album())
+            album_data['task'] = task_reproc
+            
+            # Não bloquear - deixar passar para o ConversationHandler aguardar reprocessamento
+            return
         
         # Adicionar update à lista (evitar duplicatas)
         if message_id not in [u.message.message_id for u in album_data['updates'] if u.message]:
