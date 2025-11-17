@@ -2544,6 +2544,42 @@ def main():
         # O ConversationHandler vai verificar se há fotos coletadas para este media_group_id
         # Se houver, vai usar as fotos coletadas em vez de processar a foto individual
     
+    # Handler para detectar menções do bot (em grupos ou privado)
+    async def handle_bot_mention(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Detectar quando o bot é mencionado e iniciar conversa"""
+        if not update.message or not update.message.text:
+            return
+        
+        # Obter informações do bot
+        bot_info = await context.bot.get_me()
+        bot_username = bot_info.username
+        
+        # Verificar se o bot foi mencionado
+        message_text = update.message.text or ""
+        entities = update.message.entities or []
+        
+        bot_mentioned = False
+        for entity in entities:
+            if entity.type == "mention":
+                # Extrair o texto mencionado
+                mention_text = message_text[entity.offset:entity.offset + entity.length]
+                # Verificar se é menção do bot (com ou sem @)
+                if mention_text.lower() in [f"@{bot_username}", bot_username, f"@{bot_username.lower()}", bot_username.lower()]:
+                    bot_mentioned = True
+                    break
+        
+        # Também verificar se a mensagem contém apenas o username do bot (sem @)
+        if not bot_mentioned:
+            message_lower = message_text.lower().strip()
+            if message_lower in [bot_username.lower(), f"@{bot_username.lower()}"]:
+                bot_mentioned = True
+        
+        if bot_mentioned:
+            chat_type = update.effective_chat.type
+            logger.info(f"🔔 Bot mencionado ({chat_type}) por @{update.effective_user.username} (ID: {update.effective_user.id})")
+            # Iniciar conversa chamando bot.start
+            await bot.start(update, context)
+    
     # Handler para logar todas as mensagens recebidas (debug)
     async def log_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Logar todas as atualizações recebidas"""
@@ -2555,12 +2591,18 @@ def main():
     # Adicionar handler de agrupamento de álbuns (group=-1, ANTES do ConversationHandler)
     application.add_handler(MessageHandler(filters.PHOTO, group_album_photos), group=-1)
     
+    # Adicionar handler para menções do bot (em grupos ou privado, ANTES do ConversationHandler)
+    application.add_handler(MessageHandler(filters.TEXT, handle_bot_mention), group=-1)
+    
     # Adicionar handler de log (com prioridade baixa para não interferir)
     application.add_handler(MessageHandler(filters.ALL, log_all_updates), group=-1)
     
     # Definir handlers da conversa
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("relatorio", bot.start)],
+        entry_points=[
+            CommandHandler("relatorio", bot.start),
+            # Também adicionar como entry point para menções (mas o handler acima já cuida disso)
+        ],
         states={
             SELECIONAR_ATENDIMENTO: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.selecionar_atendimento)],
             HORARIO_CHEGADA: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.horario_chegada)],
