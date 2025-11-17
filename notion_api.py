@@ -10,6 +10,9 @@ from config import (
     NOTION_CALENDARIO_DB
 )
 
+# Configurar logger no nível do módulo
+logger_notion = logging.getLogger(__name__)
+
 
 class NotionAPI:
     """Classe para interagir com a API do Notion"""
@@ -94,9 +97,6 @@ class NotionAPI:
         # data_fim: amanhã (exclusivo, então inclui até hoje)
         data_inicio = dias_atras.strftime("%Y-%m-%d")
         data_fim = (hoje + timedelta(days=1)).strftime("%Y-%m-%d")  # Amanhã (exclusivo)
-        
-        import logging
-        logger_notion = logging.getLogger(__name__)
         filtro_tipo = "sem relatório" if sem_relatorio else "todos"
         logger_notion.info(f"🔍 Buscando atendimentos do chef {chef_id[:8]}... de {data_inicio} até {data_fim} (exclusivo) - {filtro_tipo}")
         
@@ -156,8 +156,6 @@ class NotionAPI:
                 
                 # Processar resultados da página atual
                 resultados_pagina = data.get('results', [])
-                import logging
-                logger_notion = logging.getLogger(__name__)
                 logger_notion.info(f"📄 Página atual: {len(resultados_pagina)} resultados")
                 
                 # Contadores para debug
@@ -271,8 +269,6 @@ class NotionAPI:
                 has_more = data.get('has_more', False)
                 next_cursor = data.get('next_cursor')
             
-            import logging
-            logger_notion = logging.getLogger(__name__)
             logger_notion.info(f"📊 Total de atendimentos encontrados: {len(atendimentos)}")
             if len(atendimentos) > 0:
                 logger_notion.info(f"📋 Atendimentos: {', '.join([f'{a['cliente_nome']} ({a['data_formatada']})' for a in atendimentos[:5]])}")
