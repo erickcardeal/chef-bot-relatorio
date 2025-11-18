@@ -2363,6 +2363,9 @@ class ChefBot:
                                         "Não se esqueça de pontuar temperos sensíveis como: Pimentas, Açafrão da terra, Canela, Sal, Zatar, etc.."
                                     )
                                     
+                                    # Retomar timeout após envio bem-sucedido
+                                    self.retomar_timeout(context, user_id, chat_id)
+                                    
                                     # Reagendar timeout após enviar mensagem esperando resposta
                                     self.reagendar_timeout_apos_mensagem(update, context)
                                     
