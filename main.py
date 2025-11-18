@@ -94,6 +94,10 @@ user_activity: Dict[int, Dict[str, Any]] = {}
 # Estrutura: {user_id: True} - usuário teve conversa encerrada por timeout
 timeout_encerrados: Dict[int, bool] = {}
 
+# Configuração de timeout (em segundos)
+TIMEOUT_WARNING = 300  # 5 minutos - tempo para aviso de inatividade
+TIMEOUT_FINAL = 420    # 7 minutos - tempo para encerrar conversa por inatividade
+
 # Timezone Brasil
 BR_TZ = pytz.timezone('America/Sao_Paulo')
 
@@ -134,44 +138,61 @@ class ChefBot:
         logger.debug(f"⏱️ Atividade atualizada para usuário {user_id}")
     
     async def verificar_timeout_warning(self, context: ContextTypes.DEFAULT_TYPE):
-        """Verificar se usuário está inativo há 2 minutos e enviar aviso"""
+        """Verificar se usuário está inativo há 5 minutos e enviar aviso"""
         user_id = context.job.data.get('user_id')
         chat_id = context.job.data.get('chat_id')
         
         if user_id not in user_activity:
             return
         
+        # Verificar se está processando - se sim, não verificar timeout
+        if user_activity[user_id].get('processando', False):
+            logger.info(f"⏸️ Timeout pausado - processamento ativo para usuário {user_id}")
+            # Reagendar verificação após 30 segundos
+            job_queue = context.job_queue
+            if job_queue:
+                warning_job = job_queue.run_once(
+                    self.verificar_timeout_warning,
+                    when=30,
+                    data={'user_id': user_id, 'chat_id': chat_id}
+                )
+                user_activity[user_id]['timeout_warning_job'] = warning_job
+            return
+        
         ultima_atividade = user_activity[user_id].get('last_activity')
         if not ultima_atividade:
             return
         
-        # Verificar se ainda está inativo (2 minutos)
+        # Verificar se ainda está inativo (5 minutos)
         agora = datetime.now(BR_TZ)
         tempo_inativo = (agora - ultima_atividade).total_seconds()
         
-        if tempo_inativo >= 120:  # 2 minutos
+        if tempo_inativo >= TIMEOUT_WARNING:  # 5 minutos
             logger.info(f"⏱️ Usuário {user_id} inativo há {tempo_inativo:.0f}s - enviando aviso")
             
             try:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="👋 Você ainda está aí? Quer continuar preenchendo o relatório?"
+                    text="⏱️ *Você está inativo há 5 minutos.*\n\n"
+                         "Se não responder em mais 2 minutos, a conversa será encerrada.\n\n"
+                         "Por favor, continue respondendo ou envie /relatorio para reiniciar.",
+                    parse_mode='Markdown'
                 )
                 
-                # Agendar job para encerrar conversa após 60s
+                # Agendar job para encerrar conversa após 2 minutos (120s)
                 job_queue = context.job_queue
                 if job_queue:
                     end_job = job_queue.run_once(
                         self.encerrar_conversa_timeout,
-                        when=60,  # 60 segundos
+                        when=120,  # 2 minutos
                         data={'user_id': user_id, 'chat_id': chat_id}
                     )
                     user_activity[user_id]['timeout_end_job'] = end_job
             except Exception as e:
                 logger.error(f"❌ Erro ao enviar aviso de timeout: {e}")
         else:
-            # Ainda não completou 2 minutos, reagendar verificação
-            tempo_restante = 120 - tempo_inativo
+            # Ainda não completou 5 minutos, reagendar verificação
+            tempo_restante = TIMEOUT_WARNING - tempo_inativo
             if tempo_restante > 0:
                 job_queue = context.job_queue
                 if job_queue:
@@ -233,11 +254,16 @@ class ChefBot:
             except Exception as e:
                 logger.debug(f"⚠️ Erro ao cancelar timeout anterior: {e}")
         
-        # Agendar verificação após 2 minutos (120 segundos)
+        # Agendar verificação após 5 minutos (300 segundos)
+        # Mas só se NÃO estiver processando
+        if user_id in user_activity and user_activity[user_id].get('processando', False):
+            logger.info(f"⏸️ Não agendando timeout - processamento ativo para usuário {user_id}")
+            return
+        
         try:
             warning_job = job_queue.run_once(
                 self.verificar_timeout_warning,
-                when=120,  # 2 minutos
+                when=TIMEOUT_WARNING,  # 5 minutos
                 data={'user_id': user_id, 'chat_id': chat_id}
             )
             
@@ -246,7 +272,7 @@ class ChefBot:
             
             user_activity[user_id]['timeout_warning_job'] = warning_job
             user_activity[user_id]['last_activity'] = datetime.now(BR_TZ)
-            logger.info(f"⏱️ Verificação de timeout agendada para usuário {user_id} (2 minutos) - chat_id: {chat_id}")
+            logger.info(f"⏱️ Verificação de timeout agendada para usuário {user_id} ({TIMEOUT_WARNING}s) - chat_id: {chat_id}")
         except Exception as e:
             logger.error(f"❌ Erro ao agendar timeout para user {user_id}: {e}", exc_info=True)
     
@@ -263,7 +289,56 @@ class ChefBot:
         """Limpar flag de timeout encerrado (quando usuário reinicia)"""
         if user_id in timeout_encerrados:
             del timeout_encerrados[user_id]
-            logger.debug(f"✅ Flag de timeout_encerrado removido para user {user_id}")
+    
+    def pausar_timeout(self, user_id: int):
+        """Pausa timeout durante processamento"""
+        if user_id not in user_activity:
+            user_activity[user_id] = {}
+        
+        # Marcar como processando
+        user_activity[user_id]['processando'] = True
+        
+        # Cancelar jobs de timeout ativos
+        if 'timeout_warning_job' in user_activity[user_id] and user_activity[user_id]['timeout_warning_job']:
+            try:
+                user_activity[user_id]['timeout_warning_job'].schedule_removal()
+            except:
+                pass
+        
+        if 'timeout_end_job' in user_activity[user_id] and user_activity[user_id]['timeout_end_job']:
+            try:
+                user_activity[user_id]['timeout_end_job'].schedule_removal()
+            except:
+                pass
+        
+        logger.info(f"⏸️ Timeout pausado para usuário {user_id} (processamento ativo)")
+    
+    def retomar_timeout(self, context: ContextTypes.DEFAULT_TYPE, user_id: int, chat_id: int):
+        """Retoma timeout após processamento"""
+        if user_id not in user_activity:
+            user_activity[user_id] = {}
+        
+        # Marcar como não processando
+        user_activity[user_id]['processando'] = False
+        user_activity[user_id]['last_activity'] = datetime.now(BR_TZ)
+        
+        # Reagendar timeout
+        try:
+            job_queue = context.job_queue
+            if not job_queue:
+                if hasattr(context, 'application') and context.application:
+                    job_queue = context.application.job_queue
+            
+            if job_queue:
+                warning_job = job_queue.run_once(
+                    self.verificar_timeout_warning,
+                    when=TIMEOUT_WARNING,
+                    data={'user_id': user_id, 'chat_id': chat_id}
+                )
+                user_activity[user_id]['timeout_warning_job'] = warning_job
+                logger.info(f"▶️ Timeout retomado para usuário {user_id} ({TIMEOUT_WARNING}s)")
+        except Exception as e:
+            logger.error(f"❌ Erro ao retomar timeout para user {user_id}: {e}", exc_info=True)
     
     def limpar_todos_dados_usuario(self, user_id: int, context: ContextTypes.DEFAULT_TYPE):
         """Limpar todos os dados do usuário: user_data, user_activity e timeout_encerrados"""
@@ -1943,6 +2018,12 @@ class ChefBot:
 
     async def enviar_fase1(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Enviar FASE 1: dados básicos + fotos para n8n"""
+        user_id = update.effective_user.id
+        chat_id = update.effective_chat.id
+        
+        # Pausar timeout durante envio para n8n
+        self.pausar_timeout(user_id)
+        
         try:
             # Mensagens temáticas de cozinha para mostrar enquanto processa
             mensagens_aguarde = [
