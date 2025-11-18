@@ -2568,10 +2568,107 @@ def main():
             if album_data.get('processed', False) and album_data.get('message_sent', False):
                 raise ApplicationHandlerStop
         
-        # IMPORTANTE: Se o álbum ainda NÃO foi processado, permitir que a primeira foto passe
-        # mas ela vai aguardar no ConversationHandler até o álbum ser processado
-        # As outras fotos serão bloqueadas
+        # IMPORTANTE: Se o álbum ainda NÃO foi processado, criar task para processar
+        # e permitir que a primeira foto passe (ela vai aguardar no ConversationHandler)
         if not album_data.get('processed', False):
+            # Cancelar task anterior se existir (reset timer)
+            if album_data.get('task') and not album_data['task'].done():
+                album_data['task'].cancel()
+                logger.info(f"🔄 Cancelando task anterior (reset timer)")
+            
+            # Criar task para processar álbum após aguardar todas as fotos
+            # IMPORTANTE: Criar a task ANTES de permitir que a primeira foto passe
+            async def process_album_after_wait():
+                """Processar álbum após aguardar todas as fotos"""
+                # Aguardar 3 segundos inicialmente (fotos do Telegram podem chegar com delay)
+                await asyncio.sleep(3)
+                
+                # Verificar se ainda temos o álbum
+                if user_id not in album_collector or media_group_id not in album_collector[user_id]:
+                    logger.debug(f"⚠️ Álbum {media_group_id} não encontrado durante processamento")
+                    return
+                
+                album_data = album_collector[user_id][media_group_id]
+                
+                # Verificar se já foi processado
+                if album_data['processed']:
+                    logger.info(f"📸 Álbum já foi processado (media_group_id: {media_group_id})")
+                    return
+                
+                # Verificar se ainda não recebemos mais fotos recentemente
+                # Aguardar até 3 segundos adicionais se fotos ainda estão chegando
+                for tentativa in range(3):  # Máximo 3 tentativas (3x 1s = 3s adicionais)
+                    tempo_decorrido = asyncio.get_event_loop().time() - album_data['last_update_time']
+                    if tempo_decorrido < 1.5:  # Se recebemos foto recentemente (menos de 1.5s), aguardar mais
+                        logger.info(f"⏳ Recebemos foto recentemente ({tempo_decorrido:.1f}s atrás), aguardando mais... (tentativa {tentativa + 1}/3)")
+                        await asyncio.sleep(1)  # Aguardar 1 segundo e verificar novamente
+                    else:
+                        break  # Não recebemos foto recentemente, pode processar
+                
+                # Processar todas as fotos do álbum
+                updates_album = album_data['updates']
+                qtd_fotos = len(updates_album)
+                
+                # Verificar limite de fotos
+                if qtd_fotos > MAX_FOTOS_POR_ALBUM:
+                    logger.warning(f"⚠️ Álbum com {qtd_fotos} fotos excede o limite de {MAX_FOTOS_POR_ALBUM}. Processando apenas as primeiras {MAX_FOTOS_POR_ALBUM}.")
+                    # Enviar mensagem de aviso ao usuário (se possível)
+                    try:
+                        if updates_album and updates_album[0].message:
+                            await updates_album[0].message.reply_text(
+                                f"⚠️ Você enviou {qtd_fotos} fotos, mas o limite é {MAX_FOTOS_POR_ALBUM}.\n"
+                                f"Vou processar apenas as primeiras {MAX_FOTOS_POR_ALBUM} fotos."
+                            )
+                    except:
+                        pass
+                    updates_album = updates_album[:MAX_FOTOS_POR_ALBUM]
+                    qtd_fotos = MAX_FOTOS_POR_ALBUM
+                
+                logger.info(f"📸 Processando álbum completo: {qtd_fotos} foto(s) coletada(s) (media_group_id: {media_group_id})")
+                
+                # Marcar como processado
+                album_data['processed'] = True
+                
+                # Processar todas as fotos (baixar e converter para base64)
+                fotos_processadas = []
+                for idx, update_photo in enumerate(updates_album, 1):
+                    if update_photo.message and update_photo.message.photo:
+                        try:
+                            # Baixar foto (maior resolução)
+                            # O update já tem acesso ao bot através do photo file
+                            photo_file = await update_photo.message.photo[-1].get_file()
+                            photo_bytes = BytesIO()
+                            await photo_file.download_to_memory(photo_bytes)
+                            photo_bytes.seek(0)
+                            photo_base64 = base64.b64encode(photo_bytes.read()).decode('utf-8')
+                            
+                            fotos_processadas.append({
+                                'file_unique_id': update_photo.message.photo[-1].file_unique_id,
+                                'base64': photo_base64,
+                                'message_id': update_photo.message.message_id
+                            })
+                            logger.debug(f"✅ Foto {idx}/{qtd_fotos} processada (message_id: {update_photo.message.message_id})")
+                        except Exception as e:
+                            logger.error(f"❌ Erro ao processar foto {idx}/{qtd_fotos} (message_id: {update_photo.message.message_id}): {e}")
+                
+                logger.info(f"✅ {len(fotos_processadas)} foto(s) processada(s) do álbum (media_group_id: {media_group_id})")
+                
+                # Armazenar fotos processadas no album_collector para acesso pelo ConversationHandler
+                album_data['fotos_processadas'] = fotos_processadas
+                album_data['qtd_fotos'] = len(fotos_processadas)
+                album_data['message_sent'] = False  # Inicializar flag de mensagem enviada
+                album_data['first_photo_passed'] = False  # Flag para rastrear se a primeira foto já passou
+                
+                # NÃO enviar mensagem aqui - deixar o ConversationHandler enviar quando processar
+                # Isso garante que a mensagem seja enviada no contexto correto (entrada ou saída)
+                
+                logger.info(f"✅ Álbum processado e pronto para uso (media_group_id: {media_group_id}, {len(fotos_processadas)} foto(s))")
+            
+            # Criar task para processar após aguardar (IMPORTANTE: dentro do bloco if)
+            task = asyncio.create_task(process_album_after_wait())
+            album_data['task'] = task
+            logger.info(f"⏰ Task de processamento de álbum agendada (media_group_id: {media_group_id}, aguardando 3s)")
+            
             # Se esta é a primeira foto do álbum, permitir passar (ela vai aguardar no ConversationHandler)
             if len(album_data['updates']) == 1:
                 logger.info(f"⏳ Primeira foto do álbum. Permitindo passar para ConversationHandler aguardar processamento (media_group_id: {media_group_id})")
@@ -2580,105 +2677,6 @@ def main():
                 # Outras fotos do álbum - bloquear até processamento completo
                 logger.info(f"⏳ Álbum ainda sendo coletado. Bloqueando foto adicional até processamento completo (media_group_id: {media_group_id}, {len(album_data['updates'])} foto(s))")
                 raise ApplicationHandlerStop
-        
-        # Cancelar task anterior se existir (reset timer)
-        if album_data['task'] and not album_data['task'].done():
-            album_data['task'].cancel()
-            logger.info(f"🔄 Cancelando task anterior (reset timer)")
-        
-        # Criar task para processar álbum após aguardar todas as fotos
-        async def process_album_after_wait():
-            """Processar álbum após aguardar todas as fotos"""
-            # Aguardar 5 segundos inicialmente (fotos do Telegram podem chegar com delay)
-            await asyncio.sleep(5)
-            
-            # Verificar se ainda temos o álbum
-            if user_id not in album_collector or media_group_id not in album_collector[user_id]:
-                logger.debug(f"⚠️ Álbum {media_group_id} não encontrado durante processamento")
-                return
-            
-            album_data = album_collector[user_id][media_group_id]
-            
-            # Verificar se já foi processado
-            if album_data['processed']:
-                logger.info(f"📸 Álbum já foi processado (media_group_id: {media_group_id})")
-                return
-            
-            # Verificar se ainda não recebemos mais fotos recentemente
-            # Aguardar até 3 segundos adicionais se fotos ainda estão chegando
-            for tentativa in range(3):  # Máximo 3 tentativas (3x 1s = 3s adicionais)
-                tempo_decorrido = asyncio.get_event_loop().time() - album_data['last_update_time']
-                if tempo_decorrido < 1.5:  # Se recebemos foto recentemente (menos de 1.5s), aguardar mais
-                    logger.info(f"⏳ Recebemos foto recentemente ({tempo_decorrido:.1f}s atrás), aguardando mais... (tentativa {tentativa + 1}/3)")
-                    await asyncio.sleep(1)  # Aguardar 1 segundo e verificar novamente
-                else:
-                    break  # Não recebemos foto recentemente, pode processar
-            
-            # Processar todas as fotos do álbum
-            updates_album = album_data['updates']
-            qtd_fotos = len(updates_album)
-            
-            # Verificar limite de fotos
-            if qtd_fotos > MAX_FOTOS_POR_ALBUM:
-                logger.warning(f"⚠️ Álbum com {qtd_fotos} fotos excede o limite de {MAX_FOTOS_POR_ALBUM}. Processando apenas as primeiras {MAX_FOTOS_POR_ALBUM}.")
-                # Enviar mensagem de aviso ao usuário (se possível)
-                try:
-                    if updates_album and updates_album[0].message:
-                        await updates_album[0].message.reply_text(
-                            f"⚠️ Você enviou {qtd_fotos} fotos, mas o limite é {MAX_FOTOS_POR_ALBUM}.\n"
-                            f"Vou processar apenas as primeiras {MAX_FOTOS_POR_ALBUM} fotos."
-                        )
-                except:
-                    pass
-                updates_album = updates_album[:MAX_FOTOS_POR_ALBUM]
-                qtd_fotos = MAX_FOTOS_POR_ALBUM
-            
-            logger.info(f"📸 Processando álbum completo: {qtd_fotos} foto(s) coletada(s) (media_group_id: {media_group_id})")
-            
-            # Marcar como processado
-            album_data['processed'] = True
-            
-            # Processar todas as fotos (baixar e converter para base64)
-            fotos_processadas = []
-            for idx, update_photo in enumerate(updates_album, 1):
-                if update_photo.message and update_photo.message.photo:
-                    try:
-                        # Baixar foto (maior resolução)
-                        # O update já tem acesso ao bot através do photo file
-                        photo_file = await update_photo.message.photo[-1].get_file()
-                        photo_bytes = BytesIO()
-                        await photo_file.download_to_memory(photo_bytes)
-                        photo_bytes.seek(0)
-                        photo_base64 = base64.b64encode(photo_bytes.read()).decode('utf-8')
-                        
-                        fotos_processadas.append({
-                            'file_unique_id': update_photo.message.photo[-1].file_unique_id,
-                            'base64': photo_base64,
-                            'message_id': update_photo.message.message_id
-                        })
-                        logger.debug(f"✅ Foto {idx}/{qtd_fotos} processada (message_id: {update_photo.message.message_id})")
-                    except Exception as e:
-                        logger.error(f"❌ Erro ao processar foto {idx}/{qtd_fotos} (message_id: {update_photo.message.message_id}): {e}")
-            
-            logger.info(f"✅ {len(fotos_processadas)} foto(s) processada(s) do álbum (media_group_id: {media_group_id})")
-            
-            # Armazenar fotos processadas no album_collector para acesso pelo ConversationHandler
-            album_data['fotos_processadas'] = fotos_processadas
-            album_data['qtd_fotos'] = len(fotos_processadas)
-            album_data['message_sent'] = False  # Inicializar flag de mensagem enviada
-            album_data['first_photo_passed'] = False  # Flag para rastrear se a primeira foto já passou
-            
-            # NÃO enviar mensagem aqui - deixar o ConversationHandler enviar quando processar
-            # Isso garante que a mensagem seja enviada no contexto correto (entrada ou saída)
-            
-            logger.info(f"✅ Álbum processado e pronto para uso (media_group_id: {media_group_id}, {len(fotos_processadas)} foto(s))")
-            
-            # Após processar, a primeira foto já passou para o ConversationHandler
-            # O ConversationHandler vai verificar se o álbum foi processado e usar as fotos
-        
-        # Criar task para processar após aguardar
-        task = asyncio.create_task(process_album_after_wait())
-        album_data['task'] = task
         
         # IMPORTANTE: Se o álbum já foi processado, permitir apenas UMA foto passar
         # As outras fotos devem ser bloqueadas
