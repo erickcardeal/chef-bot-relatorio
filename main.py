@@ -1326,12 +1326,64 @@ class ChefBot:
             if user_id in album_collector and media_group_id in album_collector[user_id]:
                 album_data = album_collector[user_id][media_group_id]
                 
-                # Se o álbum ainda NÃO foi processado, RETORNAR IMEDIATAMENTE sem processar
+                # Se o álbum ainda NÃO foi processado, AGUARDAR até ser processado
                 # O group_album_photos vai coletar todas as fotos primeiro
                 if not album_data.get('processed', False):
-                    logger.info(f"⏳ Álbum ainda sendo coletado pelo handler global. Retornando sem processar (media_group_id: {media_group_id})")
-                    # Retornar o mesmo estado para não mudar nada
-                    return FOTO_ENTRADA
+                    logger.info(f"⏳ Álbum ainda sendo coletado pelo handler global. Aguardando processamento (media_group_id: {media_group_id})")
+                    # Aguardar até 8 segundos, verificando a cada 0.5 segundos se foi processado
+                    tempo_max_espera = 8.0  # 8 segundos (5s inicial + 3s adicionais)
+                    intervalo_verificacao = 0.5  # Verificar a cada 0.5 segundos
+                    tempo_espera_total = 0.0
+                    
+                    while tempo_espera_total < tempo_max_espera:
+                        await asyncio.sleep(intervalo_verificacao)
+                        tempo_espera_total += intervalo_verificacao
+                        
+                        # Verificar se foi processado
+                        if user_id in album_collector and media_group_id in album_collector[user_id]:
+                            album_data = album_collector[user_id][media_group_id]
+                            if album_data.get('processed', False) and 'fotos_processadas' in album_data:
+                                # Agora foi processado - usar fotos coletadas
+                                fotos_processadas = album_data['fotos_processadas']
+                                qtd_fotos = len(fotos_processadas)
+                                
+                                if qtd_fotos == 0:
+                                    logger.warning(f"⚠️ Álbum processado mas sem fotos após espera ({tempo_espera_total:.1f}s). Continuando aguardando...")
+                                    continue  # Continuar aguardando
+                                
+                                logger.info(f"✅ Álbum processado após espera ({tempo_espera_total:.1f}s)! Usando {qtd_fotos} foto(s) coletada(s)")
+                                
+                                # Atualizar relatório com todas as fotos
+                                context.user_data['relatorio']['fotos_entrada'] = fotos_processadas
+                                context.user_data['relatorio']['foto_entrada'] = fotos_processadas[0]['base64']
+                                
+                                # Rastrear qual media_group_id foi usado para ENTRADA
+                                context.user_data['album_entrada_media_group_id'] = media_group_id
+                                
+                                # Enviar mensagem de confirmação (apenas uma vez)
+                                if not album_data.get('message_sent', False):
+                                    # Mensagem dinâmica baseada na quantidade de fotos
+                                    if qtd_fotos == 1:
+                                        mensagem_confirmacao = "✅ 1 foto de entrada recebida!\n\n"
+                                    else:
+                                        mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
+                                    
+                                    await update.message.reply_text(
+                                        mensagem_confirmacao +
+                                        "📸 *Foto de SAÍDA*\n\n"
+                                        "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
+                                        "💡 Você pode enviar uma ou várias fotos.",
+                                        parse_mode='Markdown'
+                                    )
+                                    album_data['message_sent'] = True
+                                    logger.info(f"✅ Mensagem de confirmação enviada para álbum (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
+                                
+                                return FOTO_SAIDA
+                    
+                    # Se ainda não foi processado após 8 segundos, processar como foto única (fallback)
+                    logger.warning(f"⚠️ Álbum não processado após {tempo_max_espera}s. Processando como foto única (media_group_id: {media_group_id})")
+                    # Continuar com processamento normal de foto única
+                    is_album = False  # Forçar processamento como foto única
                 
                 # Verificar se já foi processado
                 if album_data.get('processed', False) and 'fotos_processadas' in album_data:
@@ -1460,12 +1512,53 @@ class ChefBot:
             if user_id in album_collector and media_group_id in album_collector[user_id]:
                 album_data = album_collector[user_id][media_group_id]
                 
-                # Se o álbum ainda NÃO foi processado, RETORNAR IMEDIATAMENTE sem processar
+                # Se o álbum ainda NÃO foi processado, AGUARDAR até ser processado
                 # O group_album_photos vai coletar todas as fotos primeiro
                 if not album_data.get('processed', False):
-                    logger.info(f"⏳ Álbum ainda sendo coletado pelo handler global. Retornando sem processar (media_group_id: {media_group_id})")
-                    # Retornar o mesmo estado para não mudar nada
-                    return FOTO_SAIDA
+                    logger.info(f"⏳ Álbum ainda sendo coletado pelo handler global. Aguardando processamento (media_group_id: {media_group_id})")
+                    # Aguardar até 8 segundos, verificando a cada 0.5 segundos se foi processado
+                    tempo_max_espera = 8.0  # 8 segundos (5s inicial + 3s adicionais)
+                    intervalo_verificacao = 0.5  # Verificar a cada 0.5 segundos
+                    tempo_espera_total = 0.0
+                    
+                    while tempo_espera_total < tempo_max_espera:
+                        await asyncio.sleep(intervalo_verificacao)
+                        tempo_espera_total += intervalo_verificacao
+                        
+                        # Verificar se foi processado
+                        if user_id in album_collector and media_group_id in album_collector[user_id]:
+                            album_data = album_collector[user_id][media_group_id]
+                            if album_data.get('processed', False) and 'fotos_processadas' in album_data:
+                                # Agora foi processado - usar fotos coletadas
+                                fotos_processadas = album_data['fotos_processadas']
+                                qtd_fotos = len(fotos_processadas)
+                                
+                                if qtd_fotos == 0:
+                                    logger.warning(f"⚠️ Álbum processado mas sem fotos após espera ({tempo_espera_total:.1f}s). Continuando aguardando...")
+                                    continue  # Continuar aguardando
+                                
+                                logger.info(f"✅ Álbum processado após espera ({tempo_espera_total:.1f}s)! Usando {qtd_fotos} foto(s) coletada(s)")
+                                
+                                # Atualizar relatório com todas as fotos
+                                context.user_data['relatorio']['fotos_saida'] = fotos_processadas
+                                context.user_data['relatorio']['foto_saida'] = fotos_processadas[0]['base64']
+                                
+                                # Rastrear qual media_group_id foi usado para SAÍDA
+                                context.user_data['album_saida_media_group_id'] = media_group_id
+                                
+                                # Processar e mostrar resumo (apenas uma vez)
+                                if not album_data.get('message_sent', False):
+                                    await self.mostrar_resumo_fase1(update, context)
+                                    album_data['message_sent'] = True
+                                    return RESUMO_FASE1
+                                else:
+                                    # Mensagem já foi enviada, apenas retornar estado
+                                    return RESUMO_FASE1
+                    
+                    # Se ainda não foi processado após 8 segundos, processar como foto única (fallback)
+                    logger.warning(f"⚠️ Álbum não processado após {tempo_max_espera}s. Processando como foto única (media_group_id: {media_group_id})")
+                    # Continuar com processamento normal de foto única
+                    is_album = False  # Forçar processamento como foto única
                 
                 # Verificar se já foi processado
                 if album_data.get('processed', False) and 'fotos_processadas' in album_data:
