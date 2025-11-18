@@ -2859,8 +2859,8 @@ def main():
     logger.info(f"📦 Versão: commit {GIT_COMMIT[:8] if len(GIT_COMMIT) > 8 else GIT_COMMIT}")
     logger.info(f"🚂 Railway Deployment: {RAILWAY_DEPLOYMENT_ID}")
     logger.info(f"⏰ Data/Hora: {datetime.now(BR_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    logger.info("🔧 VERSÃO DO CÓDIGO: 94d7cdd - Task de processamento de álbum corrigida (3 segundos)")
-    logger.info("✅ CORREÇÃO: Task é criada quando primeira foto chega, aguarda 3s antes de processar")
+    logger.info("🔧 VERSÃO DO CÓDIGO: 062f11e - Verificação dinâmica melhorada para capturar todas as fotos")
+    logger.info("✅ CORREÇÃO: Aguarda 5s + verificação dinâmica que detecta novas fotos antes de processar")
     logger.info("=" * 60)
     logger.info("⚠️ IMPORTANTE: Certifique-se de que apenas UMA instância do bot está rodando!")
     
