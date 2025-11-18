@@ -2277,6 +2277,9 @@ class ChefBot:
                                                             parse_mode='Markdown',
                                                             reply_markup=ReplyKeyboardRemove()
                                                         )
+                                                        # Retomar timeout antes de encerrar
+                                                        retomar_timeout_safe()
+                                                        
                                                         # PARAR O PROCESSO - não continuar para inventário
                                                         context.user_data.clear()
                                                         return ConversationHandler.END
@@ -2484,6 +2487,9 @@ class ChefBot:
                                                             parse_mode='Markdown',
                                                             reply_markup=ReplyKeyboardRemove()
                                                         )
+                                                        # Retomar timeout antes de encerrar
+                                                        retomar_timeout_safe()
+                                                        
                                                         context.user_data.clear()
                                                         return ConversationHandler.END
                                                 else:
@@ -2502,6 +2508,9 @@ class ChefBot:
                                                 parse_mode='Markdown',
                                                 reply_markup=ReplyKeyboardRemove()
                                             )
+                                            # Retomar timeout antes de encerrar
+                                            retomar_timeout_safe()
+                                            
                                             context.user_data.clear()
                                             return ConversationHandler.END
                                     else:
@@ -2519,6 +2528,9 @@ class ChefBot:
                                             parse_mode='Markdown',
                                             reply_markup=ReplyKeyboardRemove()
                                         )
+                                        # Retomar timeout antes de encerrar
+                                        retomar_timeout_safe()
+                                        
                                         # PARAR O PROCESSO - não continuar para inventário
                                         context.user_data.clear()
                                         return ConversationHandler.END
@@ -2538,6 +2550,9 @@ class ChefBot:
                                     parse_mode='Markdown',
                                     reply_markup=ReplyKeyboardRemove()
                                 )
+                                # Retomar timeout antes de encerrar
+                                retomar_timeout_safe()
+                                
                                 # PARAR O PROCESSO - não continuar para inventário
                                 context.user_data.clear()
                                 return ConversationHandler.END
@@ -2556,6 +2571,9 @@ class ChefBot:
                                     parse_mode='Markdown',
                                     reply_markup=ReplyKeyboardRemove()
                                 )
+                                # Retomar timeout antes de encerrar
+                                retomar_timeout_safe()
+                                
                                 # PARAR O PROCESSO - não continuar para inventário
                                 context.user_data.clear()
                                 return ConversationHandler.END
@@ -2575,6 +2593,9 @@ class ChefBot:
                                 parse_mode='Markdown',
                                 reply_markup=ReplyKeyboardRemove()
                             )
+                            # Retomar timeout antes de encerrar
+                            retomar_timeout_safe()
+                            
                             # PARAR O PROCESSO - não continuar para inventário
                             context.user_data.clear()
                             return ConversationHandler.END
@@ -2594,6 +2615,9 @@ class ChefBot:
                         parse_mode='Markdown',
                         reply_markup=ReplyKeyboardRemove()
                     )
+                    # Retomar timeout antes de encerrar
+                    retomar_timeout_safe()
+                    
                     # PARAR O PROCESSO - não continuar para inventário
                     context.user_data.clear()
                     return ConversationHandler.END
