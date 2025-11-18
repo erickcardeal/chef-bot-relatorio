@@ -1360,7 +1360,7 @@ class ChefBot:
                                 # Rastrear qual media_group_id foi usado para ENTRADA
                                 context.user_data['album_entrada_media_group_id'] = media_group_id
                                 
-                                # Enviar mensagem de confirmação (apenas uma vez)
+                                # Enviar mensagem de confirmação com botões inline (apenas uma vez)
                                 if not album_data.get('message_sent', False):
                                     # Mensagem dinâmica baseada na quantidade de fotos
                                     if qtd_fotos == 1:
@@ -1368,17 +1368,27 @@ class ChefBot:
                                     else:
                                         mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
                                     
+                                    mensagem_confirmacao += "📸 *Próximo passo: Foto de SAÍDA*\n\n"
+                                    mensagem_confirmacao += "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
+                                    mensagem_confirmacao += "💡 Você pode enviar uma ou várias fotos, ou pular se não tiver."
+                                    
+                                    # Criar botões inline
+                                    keyboard = [
+                                        [InlineKeyboardButton("📸 Enviar fotos de saída", callback_data="proximo_foto_saida")],
+                                        [InlineKeyboardButton("⏭️ Pular fotos de saída", callback_data="pular_foto_saida")]
+                                    ]
+                                    reply_markup = InlineKeyboardMarkup(keyboard)
+                                    
                                     await update.message.reply_text(
-                                        mensagem_confirmacao +
-                                        "📸 *Foto de SAÍDA*\n\n"
-                                        "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
-                                        "💡 Você pode enviar uma ou várias fotos.",
-                                        parse_mode='Markdown'
+                                        mensagem_confirmacao,
+                                        parse_mode='Markdown',
+                                        reply_markup=reply_markup
                                     )
                                     album_data['message_sent'] = True
                                     logger.info(f"✅ Mensagem de confirmação enviada para álbum (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
                                 
-                                return FOTO_SAIDA
+                                # NÃO mudar de estado automaticamente - aguardar confirmação do usuário
+                                return FOTO_ENTRADA
                     
                     # Se ainda não foi processado após 8 segundos, processar como foto única (fallback)
                     logger.warning(f"⚠️ Álbum não processado após {tempo_max_espera}s. Processando como foto única (media_group_id: {media_group_id})")
@@ -1423,13 +1433,22 @@ class ChefBot:
                                 mensagem_confirmacao = "✅ 1 foto de entrada recebida!\n\n"
                             else:
                                 mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
-                        
+                            
+                            mensagem_confirmacao += "📸 *Próximo passo: Foto de SAÍDA*\n\n"
+                            mensagem_confirmacao += "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
+                            mensagem_confirmacao += "💡 Você pode enviar uma ou várias fotos, ou pular se não tiver."
+                            
+                            # Criar botões inline
+                            keyboard = [
+                                [InlineKeyboardButton("📸 Enviar fotos de saída", callback_data="proximo_foto_saida")],
+                                [InlineKeyboardButton("⏭️ Pular fotos de saída", callback_data="pular_foto_saida")]
+                            ]
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+                            
                             await update.message.reply_text(
-                                mensagem_confirmacao +
-                                "📸 *Foto de SAÍDA*\n\n"
-                                "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
-                                "💡 Você pode enviar uma ou várias fotos.",
-                                parse_mode='Markdown'
+                                mensagem_confirmacao,
+                                parse_mode='Markdown',
+                                reply_markup=reply_markup
                             )
                             album_data['message_sent'] = True
                             logger.info(f"✅ Mensagem de confirmação enviada para álbum (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
@@ -1437,8 +1456,8 @@ class ChefBot:
                         # Não limpar álbum do coletor aqui - deixar para o handler global bloquear outras fotos
                         # O álbum será limpo automaticamente após um tempo ou quando não houver mais fotos
                         
-                        # Mudar para estado FOTO_SAIDA
-                        return FOTO_SAIDA
+                        # NÃO mudar de estado automaticamente - aguardar confirmação do usuário
+                        return FOTO_ENTRADA
             else:
                 # Álbum não encontrado no coletor - pode ser que ainda não tenha sido processado
                 # ou que esta seja a primeira foto - RETORNAR IMEDIATAMENTE
@@ -1470,16 +1489,58 @@ class ChefBot:
             if 'fotos_entrada' in context.user_data.get('relatorio', {}):
                 del context.user_data['relatorio']['fotos_entrada']
             
-            # Enviar mensagem de confirmação e pedir foto de saída
+            # Enviar mensagem de confirmação com botões inline
+            mensagem_confirmacao = "✅ 1 foto de entrada recebida!\n\n"
+            mensagem_confirmacao += "📸 *Próximo passo: Foto de SAÍDA*\n\n"
+            mensagem_confirmacao += "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
+            mensagem_confirmacao += "💡 Você pode enviar uma ou várias fotos, ou pular se não tiver."
+            
+            # Criar botões inline
+            keyboard = [
+                [InlineKeyboardButton("📸 Enviar fotos de saída", callback_data="proximo_foto_saida")],
+                [InlineKeyboardButton("⏭️ Pular fotos de saída", callback_data="pular_foto_saida")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
             await update.message.reply_text(
-                "✅ 1 foto de entrada recebida!\n\n"
+                mensagem_confirmacao,
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+            
+            # NÃO mudar de estado automaticamente - aguardar confirmação do usuário
+            return FOTO_ENTRADA
+
+    async def handle_botoes_foto_entrada(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Handler para botões inline após processar fotos de entrada"""
+        query = update.callback_query
+        await query.answer()
+        
+        callback_data = query.data
+        
+        if callback_data == "proximo_foto_saida":
+            # Usuário quer enviar fotos de saída - mudar para estado FOTO_SAIDA
+            await query.edit_message_text(
                 "📸 *Foto de SAÍDA*\n\n"
                 "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
                 "💡 Você pode enviar uma ou várias fotos.",
                 parse_mode='Markdown'
             )
-            
+            logger.info(f"✅ Usuário {update.effective_user.id} confirmou: enviar fotos de saída")
             return FOTO_SAIDA
+        
+        elif callback_data == "pular_foto_saida":
+            # Usuário quer pular fotos de saída - ir direto para resumo
+            await query.edit_message_text(
+                "⏭️ Fotos de saída puladas.\n\n"
+                "Prosseguindo para o resumo do relatório..."
+            )
+            logger.info(f"✅ Usuário {update.effective_user.id} confirmou: pular fotos de saída")
+            # Não temos fotos de saída, então vamos direto para o resumo
+            return await self.mostrar_resumo_fase1(update, context)
+        
+        # Se não reconheceu o callback, manter no estado atual
+        return FOTO_ENTRADA
 
     async def foto_saida(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Receber foto de saída"""
