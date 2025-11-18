@@ -2742,14 +2742,10 @@ def main():
         
         # Verificar se já foi processado - se sim, verificar se precisa reprocessar
         if album_data['processed']:
-            # Se o álbum já foi processado e já enviamos mensagem, bloquear fotos adicionais
-            if album_data.get('message_sent', False):
-                logger.info(f"📸 Álbum já foi processado e mensagem enviada. Bloqueando foto (message_id: {message_id})")
-                raise ApplicationHandlerStop
-            
-            # Se o álbum foi processado mas ainda não enviamos mensagem, e uma nova foto chegou,
-            # REPROCESSAR o álbum com todas as fotos (incluindo as novas)
+            # IMPORTANTE: Se uma nova foto chegou após processamento, SEMPRE reprocessar
+            # Isso permite que fotos que chegam atrasadas sejam incluídas
             logger.info(f"📸 Álbum já foi processado mas nova foto chegou. Reprocessando álbum (message_id: {message_id})")
+            
             # Adicionar a nova foto à lista primeiro
             if message_id not in [u.message.message_id for u in album_data['updates'] if u.message]:
                 album_data['updates'].append(update)
@@ -2759,24 +2755,30 @@ def main():
             # Reprocessar o álbum com todas as fotos (incluindo as novas)
             album_data['processed'] = False  # Resetar flag para reprocessar
             album_data['fotos_processadas'] = []  # Limpar fotos processadas anteriores
+            album_data['message_sent'] = False  # Resetar flag de mensagem para permitir atualização
             
             # Criar task para reprocessar após aguardar mais fotos
             async def reprocessar_album():
-                await asyncio.sleep(2)  # Aguardar 2 segundos para ver se chegam mais fotos
+                await asyncio.sleep(3)  # Aguardar 3 segundos para ver se chegam mais fotos
                 
                 if user_id not in album_collector or media_group_id not in album_collector[user_id]:
                     return
                 
                 album_data_reproc = album_collector[user_id][media_group_id]
                 
-                if album_data_reproc.get('message_sent', False):
-                    return  # Mensagem já foi enviada, não reprocessar
-                
                 # Verificar se ainda não recebemos mais fotos recentemente
                 tempo_decorrido = asyncio.get_event_loop().time() - album_data_reproc['last_update_time']
-                if tempo_decorrido < 1.5:
+                if tempo_decorrido < 2.0:
                     logger.info(f"⏳ Ainda recebendo fotos ({tempo_decorrido:.1f}s atrás), aguardando mais...")
-                    return
+                    # Aguardar mais um pouco
+                    await asyncio.sleep(1)
+                    # Verificar novamente
+                    if user_id in album_collector and media_group_id in album_collector[user_id]:
+                        album_data_reproc = album_collector[user_id][media_group_id]
+                        tempo_decorrido = asyncio.get_event_loop().time() - album_data_reproc['last_update_time']
+                        if tempo_decorrido < 2.0:
+                            logger.info(f"⏳ Ainda recebendo fotos ({tempo_decorrido:.1f}s atrás), aguardando mais...")
+                            return
                 
                 # Reprocessar todas as fotos
                 updates_album_reproc = album_data_reproc['updates']
