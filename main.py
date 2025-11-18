@@ -2024,6 +2024,13 @@ class ChefBot:
         # Pausar timeout durante envio para n8n
         self.pausar_timeout(user_id)
         
+        # Helper para garantir retomada de timeout em todos os pontos de saída
+        def retomar_timeout_safe():
+            try:
+                self.retomar_timeout(context, user_id, chat_id)
+            except Exception as e:
+                logger.error(f"❌ Erro ao retomar timeout: {e}")
+        
         try:
             # Mensagens temáticas de cozinha para mostrar enquanto processa
             mensagens_aguarde = [
@@ -2288,6 +2295,9 @@ class ChefBot:
                                                 parse_mode='Markdown',
                                                 reply_markup=ReplyKeyboardRemove()
                                             )
+                                            # Retomar timeout antes de encerrar
+                                            retomar_timeout_safe()
+                                            
                                             # PARAR O PROCESSO - não continuar para inventário
                                             context.user_data.clear()
                                             return ConversationHandler.END
@@ -2307,6 +2317,9 @@ class ChefBot:
                                                 parse_mode='Markdown',
                                                 reply_markup=ReplyKeyboardRemove()
                                             )
+                                            # Retomar timeout antes de encerrar
+                                            retomar_timeout_safe()
+                                            
                                             # PARAR O PROCESSO - não continuar para inventário
                                             context.user_data.clear()
                                             return ConversationHandler.END
@@ -2618,6 +2631,9 @@ class ChefBot:
                 parse_mode='Markdown',
                 reply_markup=ReplyKeyboardRemove()
             )
+            # Retomar timeout antes de encerrar
+            self.retomar_timeout(context, user_id, chat_id)
+            
             # PARAR O PROCESSO - não continuar para inventário
             context.user_data.clear()
             return ConversationHandler.END
