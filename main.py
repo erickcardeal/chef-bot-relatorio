@@ -1360,7 +1360,7 @@ class ChefBot:
                                 # Rastrear qual media_group_id foi usado para ENTRADA
                                 context.user_data['album_entrada_media_group_id'] = media_group_id
                                 
-                                # Enviar mensagem de confirmação com botões inline (apenas uma vez)
+                                # Enviar mensagem de confirmação com botões inline (deletar anterior se reprocessando)
                                 if not album_data.get('message_sent', False):
                                     # Mensagem dinâmica baseada na quantidade de fotos
                                     if qtd_fotos == 1:
@@ -1368,9 +1368,7 @@ class ChefBot:
                                     else:
                                         mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
                                     
-                                    mensagem_confirmacao += "📸 *Próximo passo: Foto de SAÍDA*\n\n"
-                                    mensagem_confirmacao += "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
-                                    mensagem_confirmacao += "💡 Você pode enviar uma ou várias fotos, ou pular se não tiver."
+                                    mensagem_confirmacao += "📸 *Próximo passo: Foto de SAÍDA*"
                                     
                                     # Criar botões inline
                                     keyboard = [
@@ -1379,13 +1377,38 @@ class ChefBot:
                                     ]
                                     reply_markup = InlineKeyboardMarkup(keyboard)
                                     
-                                    await update.message.reply_text(
+                                    await self._enviar_mensagem_com_delecao(
+                                        context,
+                                        update.effective_chat.id,
                                         mensagem_confirmacao,
-                                        parse_mode='Markdown',
-                                        reply_markup=reply_markup
+                                        reply_markup=reply_markup,
+                                        parse_mode='Markdown'
                                     )
                                     album_data['message_sent'] = True
                                     logger.info(f"✅ Mensagem de confirmação enviada para álbum (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
+                                else:
+                                    # Reprocessando - atualizar mensagem existente
+                                    if qtd_fotos == 1:
+                                        mensagem_confirmacao = "✅ 1 foto de entrada recebida!\n\n"
+                                    else:
+                                        mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
+                                    
+                                    mensagem_confirmacao += "📸 *Próximo passo: Foto de SAÍDA*"
+                                    
+                                    keyboard = [
+                                        [InlineKeyboardButton("📸 Enviar fotos de saída", callback_data="proximo_foto_saida")],
+                                        [InlineKeyboardButton("⏭️ Pular fotos de saída", callback_data="pular_foto_saida")]
+                                    ]
+                                    reply_markup = InlineKeyboardMarkup(keyboard)
+                                    
+                                    await self._enviar_mensagem_com_delecao(
+                                        context,
+                                        update.effective_chat.id,
+                                        mensagem_confirmacao,
+                                        reply_markup=reply_markup,
+                                        parse_mode='Markdown'
+                                    )
+                                    logger.info(f"🔄 Mensagem atualizada após reprocessamento (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
                                 
                                 # NÃO mudar de estado automaticamente - aguardar confirmação do usuário
                                 return FOTO_ENTRADA
@@ -1426,7 +1449,7 @@ class ChefBot:
                         # Rastrear qual media_group_id foi usado para ENTRADA
                         context.user_data['album_entrada_media_group_id'] = media_group_id
                         
-                        # Enviar mensagem de confirmação e pedir foto de saída (apenas uma vez)
+                        # Enviar mensagem de confirmação (deletar anterior se reprocessando)
                         if not album_data.get('message_sent', False):
                             # Mensagem dinâmica baseada na quantidade de fotos
                             if qtd_fotos == 1:
@@ -1434,9 +1457,7 @@ class ChefBot:
                             else:
                                 mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
                             
-                            mensagem_confirmacao += "📸 *Próximo passo: Foto de SAÍDA*\n\n"
-                            mensagem_confirmacao += "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
-                            mensagem_confirmacao += "💡 Você pode enviar uma ou várias fotos, ou pular se não tiver."
+                            mensagem_confirmacao += "📸 *Próximo passo: Foto de SAÍDA*"
                             
                             # Criar botões inline
                             keyboard = [
@@ -1445,13 +1466,38 @@ class ChefBot:
                             ]
                             reply_markup = InlineKeyboardMarkup(keyboard)
                             
-                            await update.message.reply_text(
+                            await self._enviar_mensagem_com_delecao(
+                                context,
+                                update.effective_chat.id,
                                 mensagem_confirmacao,
-                                parse_mode='Markdown',
-                                reply_markup=reply_markup
+                                reply_markup=reply_markup,
+                                parse_mode='Markdown'
                             )
                             album_data['message_sent'] = True
                             logger.info(f"✅ Mensagem de confirmação enviada para álbum (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
+                        else:
+                            # Reprocessando - atualizar mensagem existente
+                            if qtd_fotos == 1:
+                                mensagem_confirmacao = "✅ 1 foto de entrada recebida!\n\n"
+                            else:
+                                mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
+                            
+                            mensagem_confirmacao += "📸 *Próximo passo: Foto de SAÍDA*"
+                            
+                            keyboard = [
+                                [InlineKeyboardButton("📸 Enviar fotos de saída", callback_data="proximo_foto_saida")],
+                                [InlineKeyboardButton("⏭️ Pular fotos de saída", callback_data="pular_foto_saida")]
+                            ]
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+                            
+                            await self._enviar_mensagem_com_delecao(
+                                context,
+                                update.effective_chat.id,
+                                mensagem_confirmacao,
+                                reply_markup=reply_markup,
+                                parse_mode='Markdown'
+                            )
+                            logger.info(f"🔄 Mensagem atualizada após reprocessamento (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
                         
                         # Não limpar álbum do coletor aqui - deixar para o handler global bloquear outras fotos
                         # O álbum será limpo automaticamente após um tempo ou quando não houver mais fotos
@@ -1491,9 +1537,7 @@ class ChefBot:
             
             # Enviar mensagem de confirmação com botões inline
             mensagem_confirmacao = "✅ 1 foto de entrada recebida!\n\n"
-            mensagem_confirmacao += "📸 *Próximo passo: Foto de SAÍDA*\n\n"
-            mensagem_confirmacao += "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
-            mensagem_confirmacao += "💡 Você pode enviar uma ou várias fotos, ou pular se não tiver."
+            mensagem_confirmacao += "📸 *Próximo passo: Foto de SAÍDA*"
             
             # Criar botões inline
             keyboard = [
@@ -1502,14 +1546,37 @@ class ChefBot:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            await update.message.reply_text(
+            await self._enviar_mensagem_com_delecao(
+                context,
+                update.effective_chat.id,
                 mensagem_confirmacao,
-                parse_mode='Markdown',
-                reply_markup=reply_markup
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
             )
             
             # NÃO mudar de estado automaticamente - aguardar confirmação do usuário
             return FOTO_ENTRADA
+
+    async def _enviar_mensagem_com_delecao(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int, texto: str, reply_markup=None, parse_mode=None):
+        """Enviar mensagem deletando a anterior (se existir)"""
+        # Deletar mensagem anterior se existir
+        if 'last_message_id' in context.user_data:
+            try:
+                await context.bot.delete_message(chat_id=chat_id, message_id=context.user_data['last_message_id'])
+            except Exception as e:
+                logger.debug(f"⚠️ Não foi possível deletar mensagem anterior: {e}")
+        
+        # Enviar nova mensagem
+        msg = await context.bot.send_message(
+            chat_id=chat_id,
+            text=texto,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode
+        )
+        
+        # Salvar ID da nova mensagem
+        context.user_data['last_message_id'] = msg.message_id
+        return msg
 
     async def handle_botoes_foto_entrada(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Handler para botões inline após processar fotos de entrada"""
@@ -1541,6 +1608,22 @@ class ChefBot:
         
         # Se não reconheceu o callback, manter no estado atual
         return FOTO_ENTRADA
+
+    async def handle_botoes_foto_saida(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Handler para botões inline após processar fotos de saída"""
+        query = update.callback_query
+        await query.answer()
+        
+        callback_data = query.data
+        
+        if callback_data == "continuar_fase1":
+            # Usuário quer continuar - mostrar resumo
+            await query.edit_message_text("✅ Prosseguindo para o resumo do relatório...")
+            logger.info(f"✅ Usuário {update.effective_user.id} confirmou: continuar após fotos de saída")
+            return await self.mostrar_resumo_fase1(update, context)
+        
+        # Se não reconheceu o callback, manter no estado atual
+        return FOTO_SAIDA
 
     async def foto_saida(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Receber foto de saída"""
@@ -1607,14 +1690,57 @@ class ChefBot:
                                 # Rastrear qual media_group_id foi usado para SAÍDA
                                 context.user_data['album_saida_media_group_id'] = media_group_id
                                 
-                                # Processar e mostrar resumo (apenas uma vez)
+                                # Enviar mensagem de confirmação com botões inline (deletar anterior se reprocessando)
                                 if not album_data.get('message_sent', False):
-                                    await self.mostrar_resumo_fase1(update, context)
+                                    # Mensagem dinâmica baseada na quantidade de fotos
+                                    if qtd_fotos == 1:
+                                        mensagem_confirmacao = "✅ 1 foto de saída recebida!\n\n"
+                                    else:
+                                        mensagem_confirmacao = f"✅ {qtd_fotos} fotos de saída recebidas!\n\n"
+                                    
+                                    mensagem_confirmacao += "Pronto para continuar?"
+                                    
+                                    # Criar botões inline
+                                    keyboard = [
+                                        [InlineKeyboardButton("✅ Continuar", callback_data="continuar_fase1")]
+                                    ]
+                                    reply_markup = InlineKeyboardMarkup(keyboard)
+                                    
+                                    await self._enviar_mensagem_com_delecao(
+                                        context,
+                                        update.effective_chat.id,
+                                        mensagem_confirmacao,
+                                        reply_markup=reply_markup,
+                                        parse_mode='Markdown'
+                                    )
                                     album_data['message_sent'] = True
-                                    return RESUMO_FASE1
+                                    logger.info(f"✅ Mensagem de confirmação enviada para álbum (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
+                                    # NÃO mudar de estado automaticamente - aguardar confirmação do usuário
+                                    return FOTO_SAIDA
                                 else:
-                                    # Mensagem já foi enviada, apenas retornar estado
-                                    return RESUMO_FASE1
+                                    # Reprocessando - atualizar mensagem existente
+                                    if qtd_fotos == 1:
+                                        mensagem_confirmacao = "✅ 1 foto de saída recebida!\n\n"
+                                    else:
+                                        mensagem_confirmacao = f"✅ {qtd_fotos} fotos de saída recebidas!\n\n"
+                                    
+                                    mensagem_confirmacao += "Pronto para continuar?"
+                                    
+                                    keyboard = [
+                                        [InlineKeyboardButton("✅ Continuar", callback_data="continuar_fase1")]
+                                    ]
+                                    reply_markup = InlineKeyboardMarkup(keyboard)
+                                    
+                                    await self._enviar_mensagem_com_delecao(
+                                        context,
+                                        update.effective_chat.id,
+                                        mensagem_confirmacao,
+                                        reply_markup=reply_markup,
+                                        parse_mode='Markdown'
+                                    )
+                                    logger.info(f"🔄 Mensagem atualizada após reprocessamento (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
+                                    # NÃO mudar de estado automaticamente - aguardar confirmação do usuário
+                                    return FOTO_SAIDA
                     
                     # Se ainda não foi processado após 8 segundos, processar como foto única (fallback)
                     logger.warning(f"⚠️ Álbum não processado após {tempo_max_espera}s. Processando como foto única (media_group_id: {media_group_id})")
@@ -1652,14 +1778,57 @@ class ChefBot:
                         # Rastrear qual media_group_id foi usado para SAÍDA
                         context.user_data['album_saida_media_group_id'] = media_group_id
                         
-                        # Processar e mostrar resumo (apenas uma vez)
+                        # Enviar mensagem de confirmação (deletar anterior se reprocessando)
                         if not album_data.get('message_sent', False):
-                            await self.mostrar_resumo_fase1(update, context)
+                            # Mensagem dinâmica baseada na quantidade de fotos
+                            if qtd_fotos == 1:
+                                mensagem_confirmacao = "✅ 1 foto de saída recebida!\n\n"
+                            else:
+                                mensagem_confirmacao = f"✅ {qtd_fotos} fotos de saída recebidas!\n\n"
+                            
+                            mensagem_confirmacao += "Pronto para continuar?"
+                            
+                            # Criar botões inline
+                            keyboard = [
+                                [InlineKeyboardButton("✅ Continuar", callback_data="continuar_fase1")]
+                            ]
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+                            
+                            await self._enviar_mensagem_com_delecao(
+                                context,
+                                update.effective_chat.id,
+                                mensagem_confirmacao,
+                                reply_markup=reply_markup,
+                                parse_mode='Markdown'
+                            )
                             album_data['message_sent'] = True
-                            return RESUMO_FASE1
+                            logger.info(f"✅ Mensagem de confirmação enviada para álbum (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
+                            # NÃO mudar de estado automaticamente - aguardar confirmação do usuário
+                            return FOTO_SAIDA
                         else:
-                            # Mensagem já foi enviada, apenas retornar estado
-                            return RESUMO_FASE1
+                            # Reprocessando - atualizar mensagem existente
+                            if qtd_fotos == 1:
+                                mensagem_confirmacao = "✅ 1 foto de saída recebida!\n\n"
+                            else:
+                                mensagem_confirmacao = f"✅ {qtd_fotos} fotos de saída recebidas!\n\n"
+                            
+                            mensagem_confirmacao += "Pronto para continuar?"
+                            
+                            keyboard = [
+                                [InlineKeyboardButton("✅ Continuar", callback_data="continuar_fase1")]
+                            ]
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+                            
+                            await self._enviar_mensagem_com_delecao(
+                                context,
+                                update.effective_chat.id,
+                                mensagem_confirmacao,
+                                reply_markup=reply_markup,
+                                parse_mode='Markdown'
+                            )
+                            logger.info(f"🔄 Mensagem atualizada após reprocessamento (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
+                            # NÃO mudar de estado automaticamente - aguardar confirmação do usuário
+                            return FOTO_SAIDA
             else:
                 # Álbum não encontrado no coletor - pode ser que ainda não tenha sido processado
                 # ou que esta seja a primeira foto - RETORNAR IMEDIATAMENTE
@@ -1691,8 +1860,26 @@ class ChefBot:
             if 'fotos_saida' in context.user_data.get('relatorio', {}):
                 del context.user_data['relatorio']['fotos_saida']
             
-            # Após as fotos, mostrar resumo e enviar FASE 1
-            return await self.mostrar_resumo_fase1(update, context)
+            # Enviar mensagem de confirmação com botões inline
+            mensagem_confirmacao = "✅ 1 foto de saída recebida!\n\n"
+            mensagem_confirmacao += "Pronto para continuar?"
+            
+            # Criar botões inline
+            keyboard = [
+                [InlineKeyboardButton("✅ Continuar", callback_data="continuar_fase1")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await self._enviar_mensagem_com_delecao(
+                context,
+                update.effective_chat.id,
+                mensagem_confirmacao,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            
+            # NÃO mudar de estado automaticamente - aguardar confirmação do usuário
+            return FOTO_SAIDA
 
     async def mostrar_resumo_fase1(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Mostrar resumo dos dados coletados até agora e destacar envio em 2 partes"""
@@ -2895,7 +3082,10 @@ def main():
                 MessageHandler(filters.PHOTO, bot.foto_entrada),
                 CallbackQueryHandler(bot.handle_botoes_foto_entrada, pattern="^(proximo_foto_saida|pular_foto_saida)$")
             ],
-            FOTO_SAIDA: [MessageHandler(filters.PHOTO, bot.foto_saida)],
+            FOTO_SAIDA: [
+                MessageHandler(filters.PHOTO, bot.foto_saida),
+                CallbackQueryHandler(bot.handle_botoes_foto_saida, pattern="^continuar_fase1$")
+            ],
             RESUMO_FASE1: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.confirmacao_fase1)],
             DESCARTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.descarte)],
             ITENS_DESCARTADOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.itens_descartados)],
