@@ -2475,11 +2475,18 @@ def main():
             if album_data.get('processed', False) and album_data.get('message_sent', False):
                 raise ApplicationHandlerStop
         
-        # IMPORTANTE: Se o álbum ainda NÃO foi processado, BLOQUEAR o handler
-        # O ConversationHandler não deve processar nada até que todas as fotos sejam coletadas
+        # IMPORTANTE: Se o álbum ainda NÃO foi processado, permitir que a primeira foto passe
+        # mas ela vai aguardar no ConversationHandler até o álbum ser processado
+        # As outras fotos serão bloqueadas
         if not album_data.get('processed', False):
-            logger.info(f"⏳ Álbum ainda sendo coletado. Bloqueando handler até processamento completo (media_group_id: {media_group_id})")
-            raise ApplicationHandlerStop
+            # Se esta é a primeira foto do álbum, permitir passar (ela vai aguardar no ConversationHandler)
+            if len(album_data['updates']) == 1:
+                logger.info(f"⏳ Primeira foto do álbum. Permitindo passar para ConversationHandler aguardar processamento (media_group_id: {media_group_id})")
+                return  # Deixar passar para o ConversationHandler
+            else:
+                # Outras fotos do álbum - bloquear até processamento completo
+                logger.info(f"⏳ Álbum ainda sendo coletado. Bloqueando foto adicional até processamento completo (media_group_id: {media_group_id}, {len(album_data['updates'])} foto(s))")
+                raise ApplicationHandlerStop
         
         # Cancelar task anterior se existir (reset timer)
         if album_data['task'] and not album_data['task'].done():
@@ -2572,6 +2579,9 @@ def main():
             # Isso garante que a mensagem seja enviada no contexto correto (entrada ou saída)
             
             logger.info(f"✅ Álbum processado e pronto para uso (media_group_id: {media_group_id}, {len(fotos_processadas)} foto(s))")
+            
+            # Após processar, a primeira foto já passou para o ConversationHandler
+            # O ConversationHandler vai verificar se o álbum foi processado e usar as fotos
         
         # Criar task para processar após aguardar
         task = asyncio.create_task(process_album_after_wait())
