@@ -2595,15 +2595,48 @@ def main():
                     logger.info(f"📸 Álbum já foi processado (media_group_id: {media_group_id})")
                     return
                 
-                # Verificar se ainda não recebemos mais fotos recentemente
-                # Aguardar até 3 segundos adicionais se fotos ainda estão chegando
-                for tentativa in range(5):  # Máximo 5 tentativas (5x 0.5s = 2.5s adicionais)
+                # Verificação dinâmica: aguardar até não haver mais fotos chegando
+                # Verifica se há updates pendentes (fotos que ainda estão chegando)
+                qtd_fotos_anterior = len(album_data['updates'])
+                tentativas_sem_mudanca = 0
+                max_tentativas_sem_mudanca = 4  # 4x 0.5s = 2s sem mudanças = pode processar
+                
+                logger.info(f"⏰ Verificação dinâmica iniciada: {qtd_fotos_anterior} foto(s) coletada(s)")
+                
+                for tentativa in range(10):  # Máximo 10 tentativas (10x 0.5s = 5s adicionais)
+                    await asyncio.sleep(0.5)  # Aguardar 0.5 segundo antes de verificar
+                    
+                    # Verificar se ainda temos o álbum
+                    if user_id not in album_collector or media_group_id not in album_collector[user_id]:
+                        break
+                    
+                    album_data = album_collector[user_id][media_group_id]
+                    
+                    # Verificar se já foi processado (pode ter sido processado por outro handler)
+                    if album_data['processed']:
+                        logger.info(f"📸 Álbum já foi processado durante verificação dinâmica (media_group_id: {media_group_id})")
+                        return
+                    
+                    # Verificar se o número de fotos mudou
+                    qtd_fotos_atual = len(album_data['updates'])
                     tempo_decorrido = asyncio.get_event_loop().time() - album_data['last_update_time']
-                    if tempo_decorrido < 2.0:  # Se recebemos foto recentemente (menos de 2s), aguardar mais
-                        logger.info(f"⏳ Recebemos foto recentemente ({tempo_decorrido:.1f}s atrás), aguardando mais... (tentativa {tentativa + 1}/5)")
-                        await asyncio.sleep(0.5)  # Aguardar 0.5 segundo e verificar novamente
+                    
+                    if qtd_fotos_atual > qtd_fotos_anterior:
+                        # Nova foto chegou! Resetar contador e aguardar mais
+                        logger.info(f"⏳ Nova foto detectada! Total: {qtd_fotos_anterior} → {qtd_fotos_atual} foto(s). Aguardando mais...")
+                        qtd_fotos_anterior = qtd_fotos_atual
+                        tentativas_sem_mudanca = 0
+                    elif tempo_decorrido < 2.0:
+                        # Foto chegou recentemente (menos de 2s), aguardar mais
+                        logger.info(f"⏳ Foto chegou recentemente ({tempo_decorrido:.1f}s atrás). Aguardando mais... (tentativa {tentativa + 1}/10)")
+                        tentativas_sem_mudanca = 0
                     else:
-                        break  # Não recebemos foto recentemente, pode processar
+                        # Não há mudanças recentes
+                        tentativas_sem_mudanca += 1
+                        if tentativas_sem_mudanca >= max_tentativas_sem_mudanca:
+                            # Não houve mudanças por 2 segundos, pode processar
+                            logger.info(f"✅ Sem novas fotos por {tentativas_sem_mudanca * 0.5:.1f}s. Processando álbum com {qtd_fotos_atual} foto(s)")
+                            break
                 
                 # Processar todas as fotos do álbum
                 updates_album = album_data['updates']
@@ -2667,7 +2700,7 @@ def main():
             # Criar task para processar após aguardar (IMPORTANTE: dentro do bloco if)
             task = asyncio.create_task(process_album_after_wait())
             album_data['task'] = task
-            logger.info(f"⏰ [VERSÃO 54d5642] Task de processamento de álbum agendada (media_group_id: {media_group_id}, aguardando 5s + verificação dinâmica)")
+            logger.info(f"⏰ [VERSÃO d2cc4f5] Task de processamento de álbum agendada (media_group_id: {media_group_id}, aguardando 5s + verificação dinâmica melhorada)")
             
             # Se esta é a primeira foto do álbum, permitir passar (ela vai aguardar no ConversationHandler)
             if len(album_data['updates']) == 1:
