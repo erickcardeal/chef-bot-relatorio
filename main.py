@@ -1360,6 +1360,9 @@ class ChefBot:
                                 # Rastrear qual media_group_id foi usado para ENTRADA
                                 context.user_data['album_entrada_media_group_id'] = media_group_id
                                 
+                                # Armazenar tipo de foto no album_data para uso na task de estabilização
+                                album_data['tipo_foto'] = 'entrada'
+                                
                                 # Verificar se álbum está estável (sem novas fotos há 5s) antes de mostrar botões
                                 album_estavel = album_data.get('estavel', False)
                                 reprocessando = album_data.get('reprocessando', False)
@@ -1432,6 +1435,9 @@ class ChefBot:
                         
                         # Rastrear qual media_group_id foi usado para ENTRADA
                         context.user_data['album_entrada_media_group_id'] = media_group_id
+                        
+                        # Armazenar tipo de foto no album_data para uso na task de estabilização
+                        album_data['tipo_foto'] = 'entrada'
                         
                         # Verificar se álbum está estável (sem novas fotos há 5s) antes de mostrar botões
                         album_estavel = album_data.get('estavel', False)
@@ -1658,6 +1664,9 @@ class ChefBot:
                                 # Rastrear qual media_group_id foi usado para SAÍDA
                                 context.user_data['album_saida_media_group_id'] = media_group_id
                                 
+                                # Armazenar tipo de foto no album_data para uso na task de estabilização
+                                album_data['tipo_foto'] = 'saida'
+                                
                                 # Verificar se álbum está estável (sem novas fotos há 5s) antes de mostrar botões
                                 album_estavel = album_data.get('estavel', False)
                                 reprocessando = album_data.get('reprocessando', False)
@@ -1729,6 +1738,9 @@ class ChefBot:
                         
                         # Rastrear qual media_group_id foi usado para SAÍDA
                         context.user_data['album_saida_media_group_id'] = media_group_id
+                        
+                        # Armazenar tipo de foto no album_data para uso na task de estabilização
+                        album_data['tipo_foto'] = 'saida'
                         
                         # Verificar se álbum está estável (sem novas fotos há 5s) antes de mostrar botões
                         album_estavel = album_data.get('estavel', False)
@@ -2699,6 +2711,11 @@ def main():
                 album_data['last_update_time'] = asyncio.get_event_loop().time()
                 logger.info(f"✅ Nova foto adicionada ao álbum (total: {len(album_data['updates'])}, media_group_id: {media_group_id})")
             
+            # Armazenar informações necessárias para enviar mensagem após estabilização
+            if 'chat_id' not in album_data:
+                album_data['chat_id'] = update.effective_chat.id
+                album_data['bot'] = context.bot
+            
             # Reprocessar o álbum com todas as fotos (incluindo as novas)
             album_data['processed'] = False  # Resetar flag para reprocessar
             album_data['fotos_processadas'] = []  # Limpar fotos processadas anteriores
@@ -2778,7 +2795,61 @@ def main():
                     # Álbum estabilizado - marcar como pronto para mostrar botões
                     album_data_final['reprocessando'] = False
                     album_data_final['estavel'] = True
-                    logger.info(f"✅ Álbum estabilizado após {tempo_decorrido_final:.1f}s sem novas fotos. Pronto para mostrar botões.")
+                    logger.info(f"✅ Álbum estabilizado após {tempo_decorrido_final:.1f}s sem novas fotos. Enviando mensagem com botões.")
+                    
+                    # Enviar mensagem com botões automaticamente após estabilização
+                    # Verificar se temos informações necessárias
+                    if 'chat_id' in album_data_final and 'bot' in album_data_final and not album_data_final.get('message_sent', False):
+                        qtd_fotos_final = len(album_data_final.get('fotos_processadas', []))
+                        tipo_foto = album_data_final.get('tipo_foto', 'entrada')  # 'entrada' ou 'saida'
+                        
+                        # Montar mensagem baseada no tipo
+                        if tipo_foto == 'entrada':
+                            if qtd_fotos_final == 1:
+                                mensagem = "✅ 1 foto de entrada recebida!\n\n📸 *Próximo passo: Foto de SAÍDA*"
+                            else:
+                                mensagem = f"✅ {qtd_fotos_final} fotos de entrada recebidas!\n\n📸 *Próximo passo: Foto de SAÍDA*"
+                            
+                            keyboard = [
+                                [InlineKeyboardButton("📸 Enviar fotos de saída", callback_data="proximo_foto_saida")],
+                                [InlineKeyboardButton("⏭️ Pular fotos de saída", callback_data="pular_foto_saida")]
+                            ]
+                        else:  # saida
+                            if qtd_fotos_final == 1:
+                                mensagem = "✅ 1 foto de saída recebida!\n\nPronto para continuar?"
+                            else:
+                                mensagem = f"✅ {qtd_fotos_final} fotos de saída recebidas!\n\nPronto para continuar?"
+                            
+                            keyboard = [
+                                [InlineKeyboardButton("✅ Continuar", callback_data="continuar_fase1")]
+                            ]
+                        
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        
+                        try:
+                            # Deletar mensagem anterior se existir
+                            if 'last_message_id' in album_data_final:
+                                try:
+                                    await album_data_final['bot'].delete_message(
+                                        chat_id=album_data_final['chat_id'],
+                                        message_id=album_data_final['last_message_id']
+                                    )
+                                except:
+                                    pass
+                            
+                            # Enviar nova mensagem com botões
+                            msg = await album_data_final['bot'].send_message(
+                                chat_id=album_data_final['chat_id'],
+                                text=mensagem,
+                                parse_mode='Markdown',
+                                reply_markup=reply_markup
+                            )
+                            
+                            album_data_final['last_message_id'] = msg.message_id
+                            album_data_final['message_sent'] = True
+                            logger.info(f"✅ Mensagem com botões enviada automaticamente após estabilização (media_group_id: {media_group_id}, {qtd_fotos_final} foto(s))")
+                        except Exception as e:
+                            logger.error(f"❌ Erro ao enviar mensagem com botões após estabilização: {e}")
                 else:
                     # Ainda recebendo fotos - manter como reprocessando
                     logger.info(f"⏳ Álbum ainda recebendo fotos ({tempo_decorrido_final:.1f}s atrás). Mantendo como reprocessando.")
