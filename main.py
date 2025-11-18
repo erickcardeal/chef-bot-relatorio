@@ -1330,8 +1330,8 @@ class ChefBot:
                 # O group_album_photos vai coletar todas as fotos primeiro
                 if not album_data.get('processed', False):
                     logger.info(f"⏳ Álbum ainda sendo coletado pelo handler global. Aguardando processamento (media_group_id: {media_group_id})")
-                    # Aguardar até 8 segundos, verificando a cada 0.5 segundos se foi processado
-                    tempo_max_espera = 8.0  # 8 segundos (5s inicial + 3s adicionais)
+                    # Aguardar até 10 segundos, verificando a cada 0.5 segundos se foi processado
+                    tempo_max_espera = 10.0  # 10 segundos (5s inicial + 2.5s adicionais + margem)
                     intervalo_verificacao = 0.5  # Verificar a cada 0.5 segundos
                     tempo_espera_total = 0.0
                     
@@ -1516,8 +1516,8 @@ class ChefBot:
                 # O group_album_photos vai coletar todas as fotos primeiro
                 if not album_data.get('processed', False):
                     logger.info(f"⏳ Álbum ainda sendo coletado pelo handler global. Aguardando processamento (media_group_id: {media_group_id})")
-                    # Aguardar até 8 segundos, verificando a cada 0.5 segundos se foi processado
-                    tempo_max_espera = 8.0  # 8 segundos (5s inicial + 3s adicionais)
+                    # Aguardar até 10 segundos, verificando a cada 0.5 segundos se foi processado
+                    tempo_max_espera = 10.0  # 10 segundos (5s inicial + 2.5s adicionais + margem)
                     intervalo_verificacao = 0.5  # Verificar a cada 0.5 segundos
                     tempo_espera_total = 0.0
                     
@@ -2580,8 +2580,8 @@ def main():
             # IMPORTANTE: Criar a task ANTES de permitir que a primeira foto passe
             async def process_album_after_wait():
                 """Processar álbum após aguardar todas as fotos"""
-                # Aguardar 3 segundos inicialmente (fotos do Telegram podem chegar com delay)
-                await asyncio.sleep(3)
+                # Aguardar 5 segundos inicialmente (fotos do Telegram podem chegar com delay de até 4-5 segundos)
+                await asyncio.sleep(5)
                 
                 # Verificar se ainda temos o álbum
                 if user_id not in album_collector or media_group_id not in album_collector[user_id]:
@@ -2597,11 +2597,11 @@ def main():
                 
                 # Verificar se ainda não recebemos mais fotos recentemente
                 # Aguardar até 3 segundos adicionais se fotos ainda estão chegando
-                for tentativa in range(3):  # Máximo 3 tentativas (3x 1s = 3s adicionais)
+                for tentativa in range(5):  # Máximo 5 tentativas (5x 0.5s = 2.5s adicionais)
                     tempo_decorrido = asyncio.get_event_loop().time() - album_data['last_update_time']
-                    if tempo_decorrido < 1.5:  # Se recebemos foto recentemente (menos de 1.5s), aguardar mais
-                        logger.info(f"⏳ Recebemos foto recentemente ({tempo_decorrido:.1f}s atrás), aguardando mais... (tentativa {tentativa + 1}/3)")
-                        await asyncio.sleep(1)  # Aguardar 1 segundo e verificar novamente
+                    if tempo_decorrido < 2.0:  # Se recebemos foto recentemente (menos de 2s), aguardar mais
+                        logger.info(f"⏳ Recebemos foto recentemente ({tempo_decorrido:.1f}s atrás), aguardando mais... (tentativa {tentativa + 1}/5)")
+                        await asyncio.sleep(0.5)  # Aguardar 0.5 segundo e verificar novamente
                     else:
                         break  # Não recebemos foto recentemente, pode processar
                 
@@ -2667,7 +2667,7 @@ def main():
             # Criar task para processar após aguardar (IMPORTANTE: dentro do bloco if)
             task = asyncio.create_task(process_album_after_wait())
             album_data['task'] = task
-            logger.info(f"⏰ [VERSÃO 94d7cdd] Task de processamento de álbum agendada (media_group_id: {media_group_id}, aguardando 3s)")
+            logger.info(f"⏰ [VERSÃO 54d5642] Task de processamento de álbum agendada (media_group_id: {media_group_id}, aguardando 5s + verificação dinâmica)")
             
             # Se esta é a primeira foto do álbum, permitir passar (ela vai aguardar no ConversationHandler)
             if len(album_data['updates']) == 1:
