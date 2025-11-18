@@ -2445,7 +2445,16 @@ def main():
         return
     
     # Criar aplicação
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    # Configurar polling mais frequente para capturar fotos de álbuns rapidamente
+    application = (
+        Application.builder()
+        .token(TELEGRAM_TOKEN)
+        .read_timeout(10)
+        .write_timeout(10)
+        .connect_timeout(10)
+        .pool_timeout(10)
+        .build()
+    )
     
     # Criar instância do bot
     bot = ChefBot()
@@ -2614,11 +2623,11 @@ def main():
                 # Verifica se há updates pendentes (fotos que ainda estão chegando)
                 qtd_fotos_anterior = len(album_data['updates'])
                 tentativas_sem_mudanca = 0
-                max_tentativas_sem_mudanca = 4  # 4x 0.5s = 2s sem mudanças = pode processar
+                max_tentativas_sem_mudanca = 8  # 8x 0.5s = 4s sem mudanças = pode processar (aumentado de 2s para 4s)
                 
                 logger.info(f"⏰ Verificação dinâmica iniciada: {qtd_fotos_anterior} foto(s) coletada(s)")
                 
-                for tentativa in range(10):  # Máximo 10 tentativas (10x 0.5s = 5s adicionais)
+                for tentativa in range(15):  # Máximo 15 tentativas (15x 0.5s = 7.5s adicionais, total ~12.5s)
                     await asyncio.sleep(0.5)  # Aguardar 0.5 segundo antes de verificar
                     
                     # Verificar se ainda temos o álbum
@@ -2883,7 +2892,8 @@ def main():
         application.run_polling(
             allowed_updates=Update.ALL_TYPES, 
             drop_pending_updates=True,
-            close_loop=False
+            close_loop=False,
+            poll_interval=2  # Polling a cada 2 segundos (ao invés de 10s padrão) para capturar fotos de álbuns rapidamente
         )
     except Conflict as e:
         logger.error(
