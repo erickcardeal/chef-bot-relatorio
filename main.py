@@ -2667,7 +2667,7 @@ def main():
             # Criar task para processar após aguardar (IMPORTANTE: dentro do bloco if)
             task = asyncio.create_task(process_album_after_wait())
             album_data['task'] = task
-            logger.info(f"⏰ Task de processamento de álbum agendada (media_group_id: {media_group_id}, aguardando 3s)")
+            logger.info(f"⏰ [VERSÃO ad344b9] Task de processamento de álbum agendada (media_group_id: {media_group_id}, aguardando 3s)")
             
             # Se esta é a primeira foto do álbum, permitir passar (ela vai aguardar no ConversationHandler)
             if len(album_data['updates']) == 1:
