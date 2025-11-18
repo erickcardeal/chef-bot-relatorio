@@ -2818,7 +2818,15 @@ def main():
     application.add_error_handler(error_handler)
     
     # Iniciar bot
+    # Log de versão para confirmar qual commit está rodando
+    GIT_COMMIT = os.getenv('GIT_COMMIT', 'unknown')
+    RAILWAY_DEPLOYMENT_ID = os.getenv('RAILWAY_DEPLOYMENT_ID', 'unknown')
+    logger.info("=" * 60)
     logger.info("Bot iniciado! 🤖")
+    logger.info(f"📦 Versão: commit {GIT_COMMIT[:8] if len(GIT_COMMIT) > 8 else GIT_COMMIT}")
+    logger.info(f"🚂 Railway Deployment: {RAILWAY_DEPLOYMENT_ID}")
+    logger.info(f"⏰ Data/Hora: {datetime.now(BR_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    logger.info("=" * 60)
     logger.info("⚠️ IMPORTANTE: Certifique-se de que apenas UMA instância do bot está rodando!")
     
     try:
