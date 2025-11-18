@@ -2667,7 +2667,7 @@ def main():
             # Criar task para processar após aguardar (IMPORTANTE: dentro do bloco if)
             task = asyncio.create_task(process_album_after_wait())
             album_data['task'] = task
-            logger.info(f"⏰ [VERSÃO ad344b9] Task de processamento de álbum agendada (media_group_id: {media_group_id}, aguardando 3s)")
+            logger.info(f"⏰ [VERSÃO 94d7cdd] Task de processamento de álbum agendada (media_group_id: {media_group_id}, aguardando 3s)")
             
             # Se esta é a primeira foto do álbum, permitir passar (ela vai aguardar no ConversationHandler)
             if len(album_data['updates']) == 1:
@@ -2826,7 +2826,8 @@ def main():
     logger.info(f"📦 Versão: commit {GIT_COMMIT[:8] if len(GIT_COMMIT) > 8 else GIT_COMMIT}")
     logger.info(f"🚂 Railway Deployment: {RAILWAY_DEPLOYMENT_ID}")
     logger.info(f"⏰ Data/Hora: {datetime.now(BR_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}")
-    logger.info("🔧 VERSÃO: 77a8d0a - Task de processamento de álbum corrigida")
+    logger.info("🔧 VERSÃO DO CÓDIGO: 94d7cdd - Task de processamento de álbum corrigida (3 segundos)")
+    logger.info("✅ CORREÇÃO: Task é criada quando primeira foto chega, aguarda 3s antes de processar")
     logger.info("=" * 60)
     logger.info("⚠️ IMPORTANTE: Certifique-se de que apenas UMA instância do bot está rodando!")
     
