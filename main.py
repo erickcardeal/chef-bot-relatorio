@@ -1326,6 +1326,13 @@ class ChefBot:
             if user_id in album_collector and media_group_id in album_collector[user_id]:
                 album_data = album_collector[user_id][media_group_id]
                 
+                # Se o álbum ainda NÃO foi processado, RETORNAR IMEDIATAMENTE sem processar
+                # O group_album_photos vai coletar todas as fotos primeiro
+                if not album_data.get('processed', False):
+                    logger.info(f"⏳ Álbum ainda sendo coletado pelo handler global. Retornando sem processar (media_group_id: {media_group_id})")
+                    # Retornar o mesmo estado para não mudar nada
+                    return FOTO_ENTRADA
+                
                 # Verificar se já foi processado
                 if album_data.get('processed', False) and 'fotos_processadas' in album_data:
                     # Álbum já foi processado - usar fotos coletadas
@@ -1380,112 +1387,12 @@ class ChefBot:
                         
                         # Mudar para estado FOTO_SAIDA
                         return FOTO_SAIDA
-                else:
-                    # Álbum ainda está sendo processado - aguardar mais tempo
-                    logger.info(f"⏳ Álbum ainda sendo processado... Aguardando fotos coletadas (media_group_id: {media_group_id})")
-                    # Aguardar até 5 segundos, verificando a cada 0.5 segundos se foi processado
-                    tempo_max_espera = 5.0  # 5 segundos
-                    intervalo_verificacao = 0.5  # Verificar a cada 0.5 segundos
-                    tempo_espera_total = 0.0
-                    
-                    while tempo_espera_total < tempo_max_espera:
-                        await asyncio.sleep(intervalo_verificacao)
-                        tempo_espera_total += intervalo_verificacao
-                        
-                        # Verificar se foi processado
-                        if user_id in album_collector and media_group_id in album_collector[user_id]:
-                            album_data = album_collector[user_id][media_group_id]
-                            if album_data.get('processed', False) and 'fotos_processadas' in album_data:
-                                # Agora foi processado - usar fotos coletadas
-                                fotos_processadas = album_data['fotos_processadas']
-                                qtd_fotos = len(fotos_processadas)
-                                
-                                logger.info(f"✅ Álbum processado após espera ({tempo_espera_total:.1f}s)! Usando {qtd_fotos} foto(s) coletada(s)")
-                                
-                                # Atualizar relatório com todas as fotos
-                                context.user_data['relatorio']['fotos_entrada'] = fotos_processadas
-                                context.user_data['relatorio']['foto_entrada'] = fotos_processadas[0]['base64']
-                                
-                                # Enviar mensagem de confirmação (apenas uma vez)
-                                if not album_data.get('message_sent', False):
-                                    # Mensagem dinâmica baseada na quantidade de fotos
-                                    if qtd_fotos == 1:
-                                        mensagem_confirmacao = "✅ 1 foto de entrada recebida!\n\n"
-                                    else:
-                                        mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
-                                    
-                                    await update.message.reply_text(
-                                        mensagem_confirmacao +
-                                        "📸 *Foto de SAÍDA*\n\n"
-                                        "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
-                                        "💡 Você pode enviar uma ou várias fotos.",
-                                        parse_mode='Markdown'
-                                    )
-                                    album_data['message_sent'] = True
-                                    logger.info(f"✅ Mensagem de confirmação enviada para álbum (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
-                                
-                                return FOTO_SAIDA
-                    
-                    # Se ainda não foi processado após 5 segundos, processar como foto única (fallback)
-                    logger.debug(f"⚠️ Álbum não processado após {tempo_max_espera}s. Processando como foto única (media_group_id: {media_group_id})")
-                    # Continuar com processamento normal de foto única
-                    is_album = False  # Forçar processamento como foto única
             else:
                 # Álbum não encontrado no coletor - pode ser que ainda não tenha sido processado
-                # ou que esta seja a primeira foto
-                logger.info(f"⚠️ Álbum não encontrado no coletor (media_group_id: {media_group_id}). Aguardando processamento...")
-                # Aguardar até 5 segundos, verificando a cada 0.5 segundos se foi processado
-                tempo_max_espera = 5.0  # 5 segundos
-                intervalo_verificacao = 0.5  # Verificar a cada 0.5 segundos
-                tempo_espera_total = 0.0
-                
-                while tempo_espera_total < tempo_max_espera:
-                    await asyncio.sleep(intervalo_verificacao)
-                    tempo_espera_total += intervalo_verificacao
-                    
-                    # Verificar se foi processado
-                    if user_id in album_collector and media_group_id in album_collector[user_id]:
-                        album_data = album_collector[user_id][media_group_id]
-                        if album_data.get('processed', False) and 'fotos_processadas' in album_data:
-                            # Agora foi processado - usar fotos coletadas
-                            fotos_processadas = album_data['fotos_processadas']
-                            qtd_fotos = len(fotos_processadas)
-                            
-                            # Verificar se há fotos processadas
-                            if qtd_fotos == 0:
-                                logger.warning(f"⚠️ Álbum processado mas sem fotos após espera ({tempo_espera_total:.1f}s). Continuando aguardando...")
-                                continue  # Continuar aguardando
-                            
-                            logger.info(f"✅ Álbum processado após espera ({tempo_espera_total:.1f}s)! Usando {qtd_fotos} foto(s) coletada(s)")
-                            
-                            # Atualizar relatório com todas as fotos
-                            context.user_data['relatorio']['fotos_entrada'] = fotos_processadas
-                            context.user_data['relatorio']['foto_entrada'] = fotos_processadas[0]['base64']
-                            
-                            # Enviar mensagem de confirmação (apenas uma vez)
-                            if not album_data.get('message_sent', False):
-                                # Mensagem dinâmica baseada na quantidade de fotos
-                                if qtd_fotos == 1:
-                                    mensagem_confirmacao = "✅ 1 foto de entrada recebida!\n\n"
-                                else:
-                                    mensagem_confirmacao = f"✅ {qtd_fotos} fotos de entrada recebidas!\n\n"
-                                
-                                await update.message.reply_text(
-                                    mensagem_confirmacao +
-                                    "📸 *Foto de SAÍDA*\n\n"
-                                    "Agora envie uma foto da cozinha/área de trabalho de quando você SAIU e deixou tudo organizado.\n\n"
-                                    "💡 Você pode enviar uma ou várias fotos.",
-                                    parse_mode='Markdown'
-                                )
-                                album_data['message_sent'] = True
-                                logger.info(f"✅ Mensagem de confirmação enviada para álbum (media_group_id: {media_group_id}, {qtd_fotos} foto(s))")
-                            
-                            return FOTO_SAIDA
-                
-                # Se ainda não foi processado após 5 segundos, processar como foto única (fallback)
-                logger.warning(f"⚠️ Álbum não processado após {tempo_max_espera}s. Processando como foto única (media_group_id: {media_group_id})")
-                # Continuar com processamento normal de foto única
-                is_album = False  # Forçar processamento como foto única
+                # ou que esta seja a primeira foto - RETORNAR IMEDIATAMENTE
+                logger.info(f"⏳ Álbum não encontrado no coletor (media_group_id: {media_group_id}). Retornando sem processar - handler global vai coletar.")
+                # Retornar o mesmo estado para não mudar nada
+                return FOTO_ENTRADA
             
         if not is_album:
             # Foto única - processar normalmente
@@ -1553,6 +1460,13 @@ class ChefBot:
             if user_id in album_collector and media_group_id in album_collector[user_id]:
                 album_data = album_collector[user_id][media_group_id]
                 
+                # Se o álbum ainda NÃO foi processado, RETORNAR IMEDIATAMENTE sem processar
+                # O group_album_photos vai coletar todas as fotos primeiro
+                if not album_data.get('processed', False):
+                    logger.info(f"⏳ Álbum ainda sendo coletado pelo handler global. Retornando sem processar (media_group_id: {media_group_id})")
+                    # Retornar o mesmo estado para não mudar nada
+                    return FOTO_SAIDA
+                
                 # Verificar se já foi processado
                 if album_data.get('processed', False) and 'fotos_processadas' in album_data:
                     # Álbum já foi processado - usar fotos coletadas
@@ -1592,85 +1506,12 @@ class ChefBot:
                         else:
                             # Mensagem já foi enviada, apenas retornar estado
                             return RESUMO_FASE1
-                else:
-                    # Álbum ainda está sendo processado - aguardar mais tempo
-                    logger.info(f"⏳ Álbum ainda sendo processado... Aguardando fotos coletadas (media_group_id: {media_group_id})")
-                    # Aguardar até 5 segundos, verificando a cada 0.5 segundos se foi processado
-                    tempo_max_espera = 5.0  # 5 segundos
-                    intervalo_verificacao = 0.5  # Verificar a cada 0.5 segundos
-                    tempo_espera_total = 0.0
-                    
-                    while tempo_espera_total < tempo_max_espera:
-                        await asyncio.sleep(intervalo_verificacao)
-                        tempo_espera_total += intervalo_verificacao
-                        
-                        # Verificar se foi processado
-                        if user_id in album_collector and media_group_id in album_collector[user_id]:
-                            album_data = album_collector[user_id][media_group_id]
-                            if album_data.get('processed', False) and 'fotos_processadas' in album_data:
-                                # Agora foi processado - usar fotos coletadas
-                                fotos_processadas = album_data['fotos_processadas']
-                                qtd_fotos = len(fotos_processadas)
-                                
-                                # Verificar se há fotos processadas
-                                if qtd_fotos == 0:
-                                    logger.warning(f"⚠️ Álbum processado mas sem fotos após espera ({tempo_espera_total:.1f}s). Continuando aguardando...")
-                                    continue  # Continuar aguardando
-                                
-                                logger.info(f"✅ Álbum processado após espera ({tempo_espera_total:.1f}s)! Usando {qtd_fotos} foto(s) coletada(s)")
-                                
-                                # Atualizar relatório com todas as fotos
-                                context.user_data['relatorio']['fotos_saida'] = fotos_processadas
-                                context.user_data['relatorio']['foto_saida'] = fotos_processadas[0]['base64']
-                                
-                                # Processar e mostrar resumo (apenas uma vez)
-                                if not album_data.get('message_sent', False):
-                                    await self.mostrar_resumo_fase1(update, context)
-                                    album_data['message_sent'] = True
-                                    return RESUMO_FASE1
-                                else:
-                                    return RESUMO_FASE1
-                    
-                    # Se ainda não foi processado após 5 segundos, processar como foto única (fallback)
-                    logger.debug(f"⚠️ Álbum não processado após {tempo_max_espera}s. Processando como foto única (media_group_id: {media_group_id})")
-                    is_album = False  # Forçar processamento como foto única
             else:
-                # Álbum não encontrado no coletor - aguardar processamento
-                logger.info(f"⚠️ Álbum não encontrado no coletor (media_group_id: {media_group_id}). Aguardando processamento...")
-                # Aguardar até 5 segundos, verificando a cada 0.5 segundos se foi processado
-                tempo_max_espera = 5.0  # 5 segundos
-                intervalo_verificacao = 0.5  # Verificar a cada 0.5 segundos
-                tempo_espera_total = 0.0
-                
-                while tempo_espera_total < tempo_max_espera:
-                    await asyncio.sleep(intervalo_verificacao)
-                    tempo_espera_total += intervalo_verificacao
-                    
-                    # Verificar se foi processado
-                    if user_id in album_collector and media_group_id in album_collector[user_id]:
-                        album_data = album_collector[user_id][media_group_id]
-                        if album_data.get('processed', False) and 'fotos_processadas' in album_data:
-                            # Agora foi processado - usar fotos coletadas
-                            fotos_processadas = album_data['fotos_processadas']
-                            qtd_fotos = len(fotos_processadas)
-                            
-                            logger.info(f"✅ Álbum processado após espera ({tempo_espera_total:.1f}s)! Usando {qtd_fotos} foto(s) coletada(s)")
-                            
-                            # Atualizar relatório com todas as fotos
-                            context.user_data['relatorio']['fotos_saida'] = fotos_processadas
-                            context.user_data['relatorio']['foto_saida'] = fotos_processadas[0]['base64']
-                            
-                            # Processar e mostrar resumo (apenas uma vez)
-                            if not album_data.get('message_sent', False):
-                                await self.mostrar_resumo_fase1(update, context)
-                                album_data['message_sent'] = True
-                                return RESUMO_FASE1
-                            else:
-                                return RESUMO_FASE1
-                
-                # Se ainda não foi processado após 5 segundos, processar como foto única (fallback)
-                logger.warning(f"⚠️ Álbum não processado após {tempo_max_espera}s. Processando como foto única (media_group_id: {media_group_id})")
-                is_album = False  # Forçar processamento como foto única
+                # Álbum não encontrado no coletor - pode ser que ainda não tenha sido processado
+                # ou que esta seja a primeira foto - RETORNAR IMEDIATAMENTE
+                logger.info(f"⏳ Álbum não encontrado no coletor (media_group_id: {media_group_id}). Retornando sem processar - handler global vai coletar.")
+                # Retornar o mesmo estado para não mudar nada
+                return FOTO_SAIDA
             
         if not is_album:
             # Foto única - processar normalmente
@@ -2625,10 +2466,20 @@ def main():
             logger.info(f"✅ Foto adicionada ao álbum pendente (total: {len(album_data['updates'])}, media_group_id: {media_group_id})")
         else:
             logger.info(f"⚠️ Foto duplicada ignorada (message_id: {message_id})")
-            # Se já está na lista e o álbum não foi processado, deixar passar para o handler processar
+            # Se já está na lista e o álbum não foi processado, BLOQUEAR o handler
+            # O handler vai retornar quando o álbum for processado
+            if not album_data.get('processed', False):
+                logger.info(f"⏳ Foto duplicada em álbum ainda não processado. Bloqueando handler.")
+                raise ApplicationHandlerStop
             # Se já está na lista e o álbum foi processado, bloquear se já enviamos mensagem
             if album_data.get('processed', False) and album_data.get('message_sent', False):
                 raise ApplicationHandlerStop
+        
+        # IMPORTANTE: Se o álbum ainda NÃO foi processado, BLOQUEAR o handler
+        # O ConversationHandler não deve processar nada até que todas as fotos sejam coletadas
+        if not album_data.get('processed', False):
+            logger.info(f"⏳ Álbum ainda sendo coletado. Bloqueando handler até processamento completo (media_group_id: {media_group_id})")
+            raise ApplicationHandlerStop
         
         # Cancelar task anterior se existir (reset timer)
         if album_data['task'] and not album_data['task'].done():
@@ -2715,6 +2566,7 @@ def main():
             album_data['fotos_processadas'] = fotos_processadas
             album_data['qtd_fotos'] = len(fotos_processadas)
             album_data['message_sent'] = False  # Inicializar flag de mensagem enviada
+            album_data['first_photo_passed'] = False  # Flag para rastrear se a primeira foto já passou
             
             # NÃO enviar mensagem aqui - deixar o ConversationHandler enviar quando processar
             # Isso garante que a mensagem seja enviada no contexto correto (entrada ou saída)
@@ -2725,9 +2577,30 @@ def main():
         task = asyncio.create_task(process_album_after_wait())
         album_data['task'] = task
         
-        # IMPORTANTE: Não bloquear a mensagem - deixar passar para o ConversationHandler
-        # O ConversationHandler vai verificar se há fotos coletadas para este media_group_id
-        # Se houver, vai usar as fotos coletadas em vez de processar a foto individual
+        # IMPORTANTE: Se o álbum já foi processado, permitir apenas UMA foto passar
+        # As outras fotos devem ser bloqueadas
+        if album_data.get('processed', False):
+            # Verificar se já permitimos uma foto passar
+            if not album_data.get('first_photo_passed', False):
+                # Verificar se esta foto está no álbum processado
+                foto_no_album = any(
+                    u.message and u.message.message_id == message_id 
+                    for u in album_data.get('updates', [])
+                )
+                if foto_no_album:
+                    # Esta foto está no álbum processado - permitir passar (primeira vez)
+                    album_data['first_photo_passed'] = True
+                    logger.info(f"✅ Foto do álbum processado permitida passar (message_id: {message_id})")
+                    # Deixar passar para o ConversationHandler
+                    return
+                else:
+                    # Esta foto não está no álbum - pode ser uma nova foto chegando depois
+                    logger.info(f"📸 Foto não está no álbum processado. Bloqueando (message_id: {message_id})")
+                    raise ApplicationHandlerStop
+            else:
+                # Já permitimos uma foto passar - bloquear todas as outras
+                logger.info(f"📸 Álbum já processado e foto já passou. Bloqueando foto (message_id: {message_id})")
+                raise ApplicationHandlerStop
     
     # Handler para detectar menções do bot (em grupos ou privado)
     async def handle_bot_mention(update: Update, context: ContextTypes.DEFAULT_TYPE):
