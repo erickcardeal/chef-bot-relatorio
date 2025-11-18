@@ -2891,7 +2891,10 @@ def main():
             DETALHE_PROBLEMA: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.detalhe_problema)],
             PORCOES_EXATAS: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.porcoes_exatas)],
             MOTIVO_PORCOES: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.motivo_porcoes)],
-            FOTO_ENTRADA: [MessageHandler(filters.PHOTO, bot.foto_entrada)],
+            FOTO_ENTRADA: [
+                MessageHandler(filters.PHOTO, bot.foto_entrada),
+                CallbackQueryHandler(bot.handle_botoes_foto_entrada, pattern="^(proximo_foto_saida|pular_foto_saida)$")
+            ],
             FOTO_SAIDA: [MessageHandler(filters.PHOTO, bot.foto_saida)],
             RESUMO_FASE1: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.confirmacao_fase1)],
             DESCARTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.descarte)],
