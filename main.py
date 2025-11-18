@@ -1673,10 +1673,25 @@ class ChefBot:
                 resumo += f"   *Itens:* {relatorio['itens_podem_vencer']}\n"
             resumo += "\n"
         
-        # Adicionar fotos
+        # Adicionar fotos (dinâmico baseado na quantidade)
         resumo += "📸 *Fotos:*\n"
-        resumo += "   • Foto de entrada: ✅\n"
-        resumo += "   • Foto de saída: ✅\n\n"
+        qtd_fotos_entrada = len(relatorio.get('fotos_entrada', [])) if 'fotos_entrada' in relatorio else (1 if relatorio.get('foto_entrada') else 0)
+        qtd_fotos_saida = len(relatorio.get('fotos_saida', [])) if 'fotos_saida' in relatorio else (1 if relatorio.get('foto_saida') else 0)
+        
+        if qtd_fotos_entrada == 1:
+            resumo += "   • Foto de entrada: ✅\n"
+        elif qtd_fotos_entrada > 1:
+            resumo += f"   • {qtd_fotos_entrada} fotos de entrada: ✅\n"
+        else:
+            resumo += "   • Foto de entrada: ❌\n"
+        
+        if qtd_fotos_saida == 1:
+            resumo += "   • Foto de saída: ✅\n"
+        elif qtd_fotos_saida > 1:
+            resumo += f"   • {qtd_fotos_saida} fotos de saída: ✅\n"
+        else:
+            resumo += "   • Foto de saída: ❌\n"
+        resumo += "\n"
         
         # Confirmar envio
         resumo += "Tudo certo? Vamos enviar a primeira parte do relatório?"
