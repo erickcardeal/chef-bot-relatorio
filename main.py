@@ -2826,6 +2826,7 @@ def main():
     logger.info(f"📦 Versão: commit {GIT_COMMIT[:8] if len(GIT_COMMIT) > 8 else GIT_COMMIT}")
     logger.info(f"🚂 Railway Deployment: {RAILWAY_DEPLOYMENT_ID}")
     logger.info(f"⏰ Data/Hora: {datetime.now(BR_TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    logger.info("🔧 VERSÃO: 77a8d0a - Task de processamento de álbum corrigida")
     logger.info("=" * 60)
     logger.info("⚠️ IMPORTANTE: Certifique-se de que apenas UMA instância do bot está rodando!")
     
