@@ -1211,7 +1211,7 @@ class ChefBot:
                     async with session.post(
                         webhook_url_fase2b,
                         json=webhook_data,
-                        timeout=aiohttp.ClientTimeout(total=30)
+                        timeout=aiohttp.ClientTimeout(total=60)
                     ) as response:
                         if response.status == 200:
                             resultado = await response.json()
@@ -2166,7 +2166,7 @@ class ChefBot:
                     async with session.post(
                         webhook_url_fase1,
                         json=payload,
-                        timeout=aiohttp.ClientTimeout(total=30)
+                        timeout=aiohttp.ClientTimeout(total=60)
                     ) as response:
                         # Marcar que recebeu resposta (evitar enviar mais mensagens de aguarde)
                         resposta_recebida = True
@@ -2607,7 +2607,7 @@ class ChefBot:
                         "❌ *ERRO AO ENVIAR RELATÓRIO*\n\n"
                         "O sistema não respondeu a tempo.\n\n"
                         "🔧 *O que aconteceu:*\n"
-                        "O sistema de processamento não respondeu dentro do tempo esperado (30 segundos).\n\n"
+                        "O sistema de processamento não respondeu dentro do tempo esperado (60 segundos).\n\n"
                         "⚠️ *Ação necessária:*\n"
                         "Por favor, entre em contato com o suporte técnico e informe este erro.\n"
                         "Seus dados foram salvos localmente, mas não foram enviados para o sistema.\n\n"
